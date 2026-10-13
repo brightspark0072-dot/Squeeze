@@ -28,3 +28,6 @@ Copy a page in `tools/`, include `shared.js` (it provides `getPdfLib()`, `getPdf
 
 ## GitHub Pages gotcha
 GitHub Pages runs Jekyll by default, which silently **does not publish any file or folder whose name starts with `_` or `.`**. Never name a shared file `_something.js`. The `.nojekyll` file at the root turns this behaviour off as a second safety net.
+
+## Protect / Unlock PDF
+`tools/pdfcrypt.js` is our own implementation (no library): Protect writes AES-256 (PDF 2.0, revision 6); Unlock opens revisions 2, 3, 4 (RC4, AES-128) and 6 (AES-256) and unpacks encrypted object streams. It was checked against `qpdf`. It needs https or localhost (WebCrypto).

@@ -143,6 +143,22 @@
     <span class="tool-arrow">&#8594;</span>
   </a>
 
+  <a class="tool-card" href="tools/protect-pdf.html" data-needs="crypt pdflib" data-tags="protect password encrypt lock secure pdf">
+    <div class="tool-icon" style="--c1:#64748b;--c2:#3b82f6">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+    </div>
+    <div class="tool-info"><h3>Protect PDF</h3><p>Add a password (AES-256)</p></div>
+    <span class="tool-arrow">&#8594;</span>
+  </a>
+
+  <a class="tool-card" href="tools/unlock-pdf.html" data-needs="crypt pdflib" data-tags="unlock password remove decrypt open pdf">
+    <div class="tool-icon" style="--c1:#64748b;--c2:#3b82f6">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>
+    </div>
+    <div class="tool-info"><h3>Unlock PDF</h3><p>Remove a password you know</p></div>
+    <span class="tool-arrow">&#8594;</span>
+  </a>
+
   <a class="tool-card" href="tools/pdf-page-numbers.html" data-needs="pdflib" data-tags="pdf page numbers add footer header">
     <div class="tool-icon" style="--c1:#f97316;--c2:#eab308">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
@@ -237,7 +253,7 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 ib.onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice; installEv = null; ib.hidden = true; };
 window.addEventListener('appinstalled', () => { ib.hidden = true; });
 // ---- offline manager: save only what you need
-const LIBS = { pdflib:{f:['vendor/pdf-lib.min.js'],mb:.5}, pdfjs:{f:['vendor/pdf.min.mjs','vendor/pdf.worker.min.mjs'],mb:1.8}, jszip:{f:['vendor/jszip.min.js'],mb:.1} };
+const LIBS = { pdflib:{f:['vendor/pdf-lib.min.js'],mb:.5}, pdfjs:{f:['vendor/pdf.min.mjs','vendor/pdf.worker.min.mjs'],mb:1.8}, jszip:{f:['vendor/jszip.min.js'],mb:.1}, crypt:{f:['tools/pdfcrypt.js'],mb:.02} };
 const tools = [...cards].map(c => ({ href:c.getAttribute('href'), name:c.querySelector('h3').textContent, needs:(c.dataset.needs||'').split(' ').filter(Boolean) }));
 const offPanel = document.getElementById('offline-panel'), offList = document.getElementById('off-list');
 const mbOf = set => { const u=new Set(); set.forEach(t=>t.needs.forEach(n=>u.add(n))); return [...u].reduce((a,n)=>a+LIBS[n].mb,0) + set.length*0.02; };
