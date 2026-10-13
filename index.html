@@ -51,10 +51,12 @@
   </div>
 </div>
 
+<div class="offline-panel"><button class="btn-primary" id="install-btn" hidden>Install Squeeze as an app</button></div>
+
 <section class="offline-panel" id="offline-panel" hidden>
   <details>
     <summary>Offline use <span id="off-status"></span></summary>
-    <p class="off-hint">Tools you open are saved on this device automatically. To use a tool with no internet later, save only the ones you need, or save everything.</p>
+    <p class="off-hint">To install the app: Chrome/Edge show an Install button above (or the install icon in the address bar); on iPhone use Share &rarr; Add to Home Screen. Tools you open are saved on this device automatically. To use a tool with no internet later, save only the ones you need, or save everything.</p>
     <div id="off-list" class="off-list"></div>
     <div class="action-row">
       <button class="btn-primary" id="off-save">Save selected</button>
@@ -230,6 +232,10 @@ searchInput.addEventListener('input', () => {
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
+let installEv = null; const ib = document.getElementById('install-btn');
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; ib.hidden = false; });
+ib.onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice; installEv = null; ib.hidden = true; };
+window.addEventListener('appinstalled', () => { ib.hidden = true; });
 // ---- offline manager: save only what you need
 const LIBS = { pdflib:{f:['vendor/pdf-lib.min.js'],mb:.5}, pdfjs:{f:['vendor/pdf.min.mjs','vendor/pdf.worker.min.mjs'],mb:1.8}, jszip:{f:['vendor/jszip.min.js'],mb:.1} };
 const tools = [...cards].map(c => ({ href:c.getAttribute('href'), name:c.querySelector('h3').textContent, needs:(c.dataset.needs||'').split(' ').filter(Boolean) }));

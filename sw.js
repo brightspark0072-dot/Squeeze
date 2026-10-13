@@ -1,6 +1,6 @@
 
 // Bump V whenever any cached file changes, so installed copies update.
-const V = 'squeeze-v6';
+const V = 'squeeze-v7';
 const CORE = [
   "./", "icon-192.png", "icon-512.png", "index.html", "manifest.webmanifest", "style.css", "tools/shared.js"
 ];
