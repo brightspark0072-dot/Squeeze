@@ -1,36 +1,10 @@
 
 // Bump V whenever any cached file changes, so installed copies update.
-const V = 'squeeze-v5';
-// Every page, script, style and library, so every tool works offline after the first visit.
+const V = 'squeeze-v7';
 const CORE = [
-  "./",
-  "icon-192.png",
-  "icon-512.png",
-  "index.html",
-  "manifest.webmanifest",
-  "style.css",
-  "tools/compress-files.html",
-  "tools/compress-images.html",
-  "tools/compress-pdf.html",
-  "tools/convert-images.html",
-  "tools/images-to-pdf.html",
-  "tools/merge-pdf.html",
-  "tools/office-to-pdf.html",
-  "tools/organize-pdf.html",
-  "tools/pdf-metadata.html",
-  "tools/pdf-page-numbers.html",
-  "tools/pdf-to-images.html",
-  "tools/pdf-to-word.html",
-  "tools/resize-images.html",
-  "tools/rotate-pdf.html",
-  "tools/shared.js",
-  "tools/split-pdf.html",
-  "tools/watermark-pdf.html",
-  "vendor/jszip.min.js",
-  "vendor/pdf-lib.min.js",
-  "vendor/pdf.min.mjs",
-  "vendor/pdf.worker.min.mjs"
+  "./", "icon-192.png", "icon-512.png", "index.html", "manifest.webmanifest", "style.css", "tools/shared.js"
 ];
+// Tool pages and libraries are cached when you open them, or when you press "Save" on the home page.
 const OPTIONAL = ['vendor/gs.mjs', 'vendor/gs.wasm']; // cached at install if you vendored them
 
 self.addEventListener('install', e => {
@@ -39,6 +13,25 @@ self.addEventListener('install', e => {
     await c.addAll(CORE);
     await Promise.all(OPTIONAL.map(u => c.add(u).catch(() => { })));
     await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('message', e => {
+  const m = e.data || [], port = e.ports[0];
+  e.waitUntil((async () => {
+    const c = await caches.open(V);
+    if (m.type === 'status') {
+      const ks = await c.keys();
+      const saved = ks.map(k => new URL(k.url).pathname.replace(/^.*\/(tools\/[^/]+\.html)$/, '$1')).filter(p => /^tools\/.+\.html$/.test(p));
+      port.postMessage({ saved: saved.filter(p => p !== 'tools/shared.js') });
+    } else if (m.type === 'save') {
+      let failed = 0;
+      await Promise.all(m.urls.map(u => c.add(u).catch(() => { failed++; })));
+      port.postMessage({ failed });
+    } else if (m.type === 'clear') {
+      for (const k of await c.keys()) { const p = new URL(k.url).pathname; if (/\/(tools\/[^/]+\.html|vendor\/[^/]+)$/.test(p)) await c.delete(k); }
+      port.postMessage({ ok: true });
+    }
   })());
 });
 

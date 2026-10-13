@@ -44,15 +44,15 @@
     <div class="control-row">
       <span class="control-label">Font Size</span>
       <div class="slider-wrap">
-        <input type="range" id="wm-size" min="20" max="100" value="48">
-        <span class="slider-val" id="size-val">48</span>
+        <input type="range" id="wm-size" min="20" max="200" value="90">
+        <span class="slider-val" id="size-val">90</span>
       </div>
     </div>
     <div class="control-row">
       <span class="control-label">Opacity</span>
       <div class="slider-wrap">
-        <input type="range" id="wm-opacity" min="5" max="60" value="20">
-        <span class="slider-val" id="op-val">20%</span>
+        <input type="range" id="wm-opacity" min="5" max="100" value="35">
+        <span class="slider-val" id="op-val">35%</span>
       </div>
     </div>
     <div class="control-row">
@@ -93,7 +93,7 @@
   const fileIn = $('#file-in'), drop = $('#drop'), controls = $('#controls');
   const actionRow = $('#action-row'), summary = $('#summary');
   const wmSize = $('#wm-size'), sizeVal = $('#size-val'), wmOp = $('#wm-opacity'), opVal = $('#op-val');
-  let currentFile = null, pdfDoc = null;
+  let currentFile = null, pdfDoc = null, srcBytes = null;
 
   wmSize.addEventListener('input', () => sizeVal.textContent = wmSize.value);
   wmOp.addEventListener('input', () => opVal.textContent = wmOp.value + '%');
@@ -103,7 +103,7 @@
     currentFile = file;
     const ab = await file.arrayBuffer();
     const { PDFDocument } = await getPdfLib();
-    pdfDoc = await PDFDocument.load(ab, { ignoreEncryption: true });
+    srcBytes = ab; pdfDoc = await PDFDocument.load(ab, { ignoreEncryption: true });
     controls.hidden = false; actionRow.hidden = false;
     toast('PDF loaded: ' + pdfDoc.getPageCount() + ' pages', 'success');
   }
@@ -113,9 +113,11 @@
     $('#run-btn').disabled = true; $('#run-btn').innerHTML = '<span class="spinner"></span> Applying...';
     try {
       const { PDFDocument, rgb, StandardFonts, degrees } = await getPdfLib();
+      // Start from the original file every time, so changing settings and re-applying never stacks on an earlier result.
+      const pdfDoc = await PDFDocument.load(srcBytes, { ignoreEncryption: true });
       const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const text = $('#wm-text').value || 'WATERMARK';
-      const fontSize = parseInt(wmSize.value);
+      const baseSize = parseInt(wmSize.value);
       const opacity = parseInt(wmOp.value) / 100;
       const colorMap = { gray: rgb(0.5,0.5,0.5), red: rgb(0.9,0.1,0.1), blue: rgb(0.1,0.2,0.9) };
       const color = colorMap[document.querySelector('input[name=wm-color]:checked').value];
@@ -127,10 +129,12 @@
         if (pagesFilter === 'odd' && i % 2 === 1) return;
         if (pagesFilter === 'even' && i % 2 === 0) return;
         const { width, height } = page.getSize();
+        const fontSize = Math.max(8, Math.round(baseSize * Math.min(width, height) / 595)); // relative to an A4 page
         const tw = font.widthOfTextAtSize(text, fontSize);
 
         if (pos === 'diagonal') {
-          page.drawText(text, { x: (width - tw) / 2, y: height / 2, size: fontSize, font, color, opacity, rotate: degrees(45) });
+          const a = Math.PI / 4, hh = fontSize * 0.35; // rotate about the text's centre so it sits mid-page
+          page.drawText(text, { x: width / 2 - (tw / 2) * Math.cos(a) + hh * Math.sin(a), y: height / 2 - (tw / 2) * Math.sin(a) - hh * Math.cos(a), size: fontSize, font, color, opacity, rotate: degrees(45) });
         } else if (pos === 'center') {
           page.drawText(text, { x: (width - tw) / 2, y: (height - fontSize) / 2, size: fontSize, font, color, opacity });
         } else {
@@ -158,7 +162,7 @@
   fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadFile(fileIn.files[0]); });
   setupDrop(drop, files => loadFile(files[0]));
   $('#reset-btn').addEventListener('click', () => {
-    currentFile = null; pdfDoc = null;
+    currentFile = null; pdfDoc = null; srcBytes = null;
     controls.hidden = true; actionRow.hidden = true; summary.hidden = true; fileIn.value = '';
   });
 })();
