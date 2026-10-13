@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PDF to Images - Squeeze</title>
 <meta name="description" content="Export PDF pages as images offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -74,14 +74,14 @@
   const fileIn = $('#file-in'), drop = $('#drop'), controls = $('#controls');
   const previewGrid = $('#preview-grid'), actionRow = $('#action-row'), summary = $('#summary');
   const quality = $('#quality'), qVal = $('#q-val'), scale = $('#scale'), sVal = $('#s-val');
-  let pdfJsDoc = null, totalPages = 0;
+  let pdfJsDoc = null, totalPages = 0, srcName = 'document';
 
   quality.addEventListener('input', () => qVal.textContent = quality.value);
   scale.addEventListener('input', () => sVal.textContent = scale.value + 'x');
 
   async function loadPdf(file) {
     if (!file.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
-    toast('Loading PDF...', 'info');
+    toast('Loading PDF...', 'info'); srcName = stem(file.name);
     try {
       const ab = await file.arrayBuffer();
       const pdfjsLib = await getPdfJs();
@@ -126,13 +126,13 @@
         const canvas = await renderPage(pdfJsDoc, i, sc);
         const blob = await new Promise(r => canvas.toBlob(r, mime, q));
         const ab = await blob.arrayBuffer();
-        zip.file('page_' + String(i).padStart(3,'0') + '.' + ext, ab);
+        zip.file(srcName + '_page_' + String(i).padStart(3,'0') + '.' + ext, ab);
       }
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       summary.hidden = false;
       summary.innerHTML = `<strong>${totalPages} pages converted to ${ext.toUpperCase()} &rarr; ${fmt(zipBlob.size)}</strong><br>
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download ZIP</button></div>`;
-      $('#dl-btn').addEventListener('click', () => download(zipBlob, 'pdf_images.zip'));
+      $('#dl-btn').addEventListener('click', () => download(zipBlob, srcName + '_' + ext + '_images.zip'));
       toast('All pages exported!', 'success');
     } catch(e) { toast('Error: ' + e.message, 'error'); }
     $('#run-btn').disabled = false; $('#run-btn').innerHTML = '&#9889; Convert All Pages';

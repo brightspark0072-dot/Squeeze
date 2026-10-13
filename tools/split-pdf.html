@@ -1,23 +1,13 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Split PDF - Squeeze</title>
 <meta name="description" content="Split PDF into individual pages offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
-<style>
-.page-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:12px; margin-top:16px; }
-.page-thumb { border:2px solid var(--gb); border-radius:10px; overflow:hidden; position:relative; cursor:pointer; aspect-ratio:3/4; background:rgba(255,255,255,0.04); display:flex; flex-direction:column; align-items:center; justify-content:center; transition:border-color .15s; }
-.page-thumb.selected { border-color:var(--ac); }
-.page-thumb canvas { max-width:100%; max-height:80%; }
-.page-num { position:absolute; bottom:4px; left:0; right:0; text-align:center; font-size:.72rem; font-weight:700; color:var(--mu); }
-.page-thumb.selected .page-num { color:var(--ac); }
-.check-icon { position:absolute; top:4px; right:4px; width:18px; height:18px; background:var(--ac); border-radius:50%; display:none; align-items:center; justify-content:center; font-size:.7rem; color:#080c1e; font-weight:700; }
-.page-thumb.selected .check-icon { display:flex; }
-</style>
 </head>
 <body class="tool-page">
 <header class="site-header">
@@ -56,7 +46,7 @@
   </div>
   <div class="action-row" id="action-row" hidden>
     <button class="btn-primary" id="extract-btn">&#9889; Extract Selected Pages</button>
-    <button class="btn-primary" id="split-all-btn" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)">&#128196; Split All Pages</button>
+    <button class="btn-secondary" id="split-all-btn">&#128196; Split All Pages</button>
     <button class="btn-secondary" id="reset-btn">&#128472; Reset</button>
   </div>
   <div class="result-summary" id="summary" hidden></div>
@@ -70,10 +60,11 @@
   const actionRow = $('#action-row'), summary = $('#summary');
   const selInfo = $('#sel-info');
 
-  let pdfDoc = null, pdfJsDoc = null, totalPages = 0, selected = new Set();
+  let pdfDoc = null, pdfJsDoc = null, totalPages = 0, selected = new Set(), srcName = 'document';
 
   async function loadPdf(file) {
     if (!file.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
+    srcName = stem(file.name);
     toast('Loading PDF...', 'info');
     try {
       const ab = await file.arrayBuffer();
@@ -142,7 +133,7 @@
       summary.hidden = false;
       summary.innerHTML = `<strong>${selected.size} pages extracted &rarr; ${fmt(blob.size)}</strong><br>
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
-      $('#dl-btn').addEventListener('click', () => download(blob, 'extracted_pages.pdf'));
+      $('#dl-btn').addEventListener('click', () => download(blob, srcName + '_pages_' + [...selected].sort((a,b)=>a-b).map(i=>i+1).join('-').slice(0,40) + '.pdf'));
       toast('Pages extracted!', 'success');
     } catch(e) { toast('Error: ' + e.message, 'error'); }
   });
@@ -158,13 +149,13 @@
         const [page] = await newDoc.copyPages(pdfDoc, [i]);
         newDoc.addPage(page);
         const bytes = await newDoc.save();
-        zip.file('page_' + String(i+1).padStart(3,'0') + '.pdf', bytes);
+        zip.file(srcName + '_page_' + String(i+1).padStart(3,'0') + '.pdf', bytes);
       }
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       summary.hidden = false;
       summary.innerHTML = `<strong>${totalPages} pages split into ZIP</strong><br>
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download ZIP</button></div>`;
-      $('#dl-btn').addEventListener('click', () => download(zipBlob, 'split_pages.zip'));
+      $('#dl-btn').addEventListener('click', () => download(zipBlob, srcName + '_split_pages.zip'));
       toast('All pages split!', 'success');
     } catch(e) { toast('Error: ' + e.message, 'error'); }
   });

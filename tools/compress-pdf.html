@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Compress PDF - Squeeze</title>
 <meta name="description" content="Reduce PDF file size offline. Nothing uploaded.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -24,7 +24,7 @@
       <div class="tool-page-icon" style="background:linear-gradient(135deg,#f43f5e,#fb923c)">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       </div>
-      <div class="tool-page-title"><h1>Compress PDF</h1><p>Shrink PDF file size while preserving quality</p></div>
+      <div class="tool-page-title"><h1>Compress PDF</h1><p>Make PDF files smaller, keeping text sharp or going smallest</p></div>
     </div>
   </div>
 </div>
@@ -33,23 +33,24 @@
   <div class="drop-zone" id="drop">
     <input type="file" id="file-in" accept=".pdf,application/pdf">
     <span class="drop-icon">&#128196;</span>
-    <p class="drop-text">Drop your PDF here</p>
-    <p class="drop-hint">or click to browse &mdash; files stay on your device</p>
+    <p class="drop-text">Click here, or drop your PDF</p>
+    <p class="drop-hint">Your file stays on your device</p>
   </div>
   <div class="controls" id="controls" hidden>
     <div class="control-row">
-      <span class="control-label">Quality Level</span>
+      <span class="control-label">Compression method</span>
       <div class="radio-group">
-        <label class="radio-pill"><input type="radio" name="qlvl" value="screen"> <span>Small (Screen)</span></label>
-        <label class="radio-pill"><input type="radio" name="qlvl" value="ebook" checked> <span>Balanced</span></label>
-        <label class="radio-pill"><input type="radio" name="qlvl" value="printer"> <span>High Quality</span></label>
+        <label class="radio-pill"><input type="radio" name="mode" value="images" checked> <span>Keep text (recommended)</span></label>
+        <label class="radio-pill"><input type="radio" name="mode" value="raster"> <span>Smallest size (pages become pictures)</span></label>
       </div>
+      <p class="opt-note" id="mode-note"></p>
     </div>
     <div class="control-row">
-      <span class="control-label">Image DPI</span>
-      <div class="slider-wrap">
-        <input type="range" id="dpi" min="72" max="300" value="150" step="12">
-        <span class="slider-val" id="dpi-val">150</span>
+      <span class="control-label">Quality level</span>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="radio" name="qlvl" value="screen"> <span>Small file</span></label>
+        <label class="radio-pill"><input type="radio" name="qlvl" value="ebook" checked> <span>Balanced</span></label>
+        <label class="radio-pill"><input type="radio" name="qlvl" value="printer"> <span>High quality</span></label>
       </div>
     </div>
   </div>
@@ -69,24 +70,152 @@
   const fileIn = $('#file-in'), drop = $('#drop'), controls = $('#controls');
   const fileList = $('#file-list'), actionRow = $('#action-row'), summary = $('#summary');
   const runBtn = $('#run-btn'), resetBtn = $('#reset-btn'), btnLabel = $('#btn-label');
-  const dpiRange = $('#dpi'), dpiVal = $('#dpi-val');
-
   let currentFile = null;
 
-  dpiRange.addEventListener('input', () => dpiVal.textContent = dpiRange.value);
+  // Quality presets. maxPx = longest side an embedded image may keep; jpeg = JPEG quality; dpi = page render resolution.
+  const PRESET = {
+    screen:  { maxPx: 1000, jpeg: 0.5,  dpi: 96 },
+    ebook:   { maxPx: 1600, jpeg: 0.65, dpi: 130 },
+    printer: { maxPx: 2400, jpeg: 0.8,  dpi: 200 }
+  };
+  const radio = n => document.querySelector('input[name=' + n + ']:checked').value;
+  const NOTES = {
+    images: 'Shrinks the photos and scans inside the PDF. Text stays sharp and selectable.',
+    raster: 'Turns every page into a picture. Smallest result, but text can no longer be selected or searched.'
+  };
+  function note() { $('#mode-note').textContent = NOTES[radio('mode')]; }
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', note)); note();
+
+  function canvasToJpeg(canvas, q) { return new Promise(r => canvas.toBlob(r, 'image/jpeg', q)); }
+
+  // Read width, height and number of colour components from a JPEG header.
+  function jpegInfo(b) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xFF) { i++; continue; }
+      const m = b[i + 1];
+      if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+      const len = (b[i + 2] << 8) | b[i + 3];
+      if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) return { h: (b[i + 5] << 8) | b[i + 6], w: (b[i + 7] << 8) | b[i + 8], comps: b[i + 9] };
+      i += 2 + len;
+    }
+    return null;
+  }
+
+  async function inflate(bytes) {
+    const ds = new DecompressionStream('deflate');
+    return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer());
+  }
+  // Undo PNG-style row predictors (/Predictor 10-15) used with Flate images.
+  function unpredict(data, colors, columns) {
+    const rowBytes = colors * columns, rows = Math.floor(data.length / (rowBytes + 1));
+    const out = new Uint8Array(rows * rowBytes), bpp = colors;
+    for (let r = 0; r < rows; r++) {
+      const ft = data[r * (rowBytes + 1)], src = r * (rowBytes + 1) + 1, dst = r * rowBytes, up = dst - rowBytes;
+      for (let i = 0; i < rowBytes; i++) {
+        const x = data[src + i], a = i >= bpp ? out[dst + i - bpp] : 0, b = r ? out[up + i] : 0, c = (i >= bpp && r) ? out[up + i - bpp] : 0;
+        let v;
+        if (ft === 0) v = x; else if (ft === 1) v = x + a; else if (ft === 2) v = x + b; else if (ft === 3) v = x + ((a + b) >> 1);
+        else { const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c); v = x + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c); }
+        out[dst + i] = v & 255;
+      }
+    }
+    return out;
+  }
+
+  // METHOD 1: shrink the JPEG photos inside the PDF, keep everything else (text, vectors) untouched.
+  async function recompressImages(bytes, preset, setStatus) {
+    const { PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFDict, PDFArray } = await getPdfLib();
+    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    const ctx = doc.context, N = (s) => PDFName.of(s);
+    const entries = ctx.enumerateIndirectObjects().filter(([, o]) => o instanceof PDFRawStream && o.dict.get(N('Subtype')) === N('Image'));
+    let done = 0, changed = 0, i = 0;
+    for (const [ref, st] of entries) {
+      setStatus('Shrinking images ' + (++i) + ' of ' + entries.length + '…');
+      try {
+        const d = st.dict;
+        let f = d.get(N('Filter'));
+        if (f instanceof PDFArray && f.size() === 1) f = f.get(0);
+        if (d.get(N('ImageMask')) || d.get(N('Mask')) || d.get(N('Decode'))) continue;
+        const raw = st.contents;
+        let bmp;
+        if (f === N('DCTDecode')) {                               // JPEG: decode it with the browser
+          const info = jpegInfo(raw);
+          if (!info || info.comps === 4) continue;                // skip CMYK
+          try { bmp = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' }), { imageOrientation: 'none' }); }
+          catch { bmp = await createImageBitmap(new Blob([raw], { type: 'image/jpeg' })); }
+        } else if (f === N('FlateDecode') && raw.length > 30000) { // raw pixels: decode, then re-encode as JPEG
+          const bpc = d.get(N('BitsPerComponent')); if (!bpc || bpc.asNumber() !== 8) continue;
+          let cs = d.get(N('ColorSpace')), colors = 0;
+          if (cs === N('DeviceRGB')) colors = 3; else if (cs === N('DeviceGray')) colors = 1;
+          else if (cs instanceof PDFArray && cs.get(0) === N('ICCBased')) { const prof = ctx.lookup(cs.get(1)); const nn = prof && prof.dict && prof.dict.get(N('N')); colors = nn ? nn.asNumber() : 0; }
+          if (colors !== 1 && colors !== 3) continue;
+          const w0 = d.get(N('Width')).asNumber(), h0 = d.get(N('Height')).asNumber();
+          let dp = d.get(N('DecodeParms')); dp = dp && ctx.lookup(dp); if (dp instanceof PDFArray) dp = ctx.lookup(dp.get(0));
+          const pred = dp && dp.get ? (dp.get(N('Predictor')) ? dp.get(N('Predictor')).asNumber() : 1) : 1;
+          let px = await inflate(raw);
+          if (pred >= 10) px = unpredict(px, colors, w0); else if (pred !== 1) continue;
+          if (px.length < w0 * h0 * colors) continue;
+          const rgba = new Uint8ClampedArray(w0 * h0 * 4);
+          for (let q = 0, o = 0; q < w0 * h0; q++, o += 4) {
+            if (colors === 3) { rgba[o] = px[q * 3]; rgba[o + 1] = px[q * 3 + 1]; rgba[o + 2] = px[q * 3 + 2]; }
+            else rgba[o] = rgba[o + 1] = rgba[o + 2] = px[q];
+            rgba[o + 3] = 255;
+          }
+          bmp = await createImageBitmap(new ImageData(rgba, w0, h0));
+        } else continue;
+        const k = Math.min(1, preset.maxPx / Math.max(bmp.width, bmp.height));
+        const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.imageSmoothingQuality = 'high'; x.drawImage(bmp, 0, 0, w, h);
+        if (bmp.close) bmp.close();
+        const out = new Uint8Array(await (await canvasToJpeg(c, preset.jpeg)).arrayBuffer());
+        c.width = c.height = 0;
+        if (out.length >= raw.length * 0.9) continue;             // not worth it
+        const nd = d.clone(ctx);
+        nd.set(N('Width'), PDFNumber.of(w)); nd.set(N('Height'), PDFNumber.of(h));
+        nd.set(N('Filter'), N('DCTDecode')); nd.set(N('ColorSpace'), N('DeviceRGB')); nd.set(N('BitsPerComponent'), PDFNumber.of(8));
+        nd.delete(N('DecodeParms')); nd.delete(N('Decode'));
+        ctx.assign(ref, PDFRawStream.of(nd, out));
+        changed++;
+        if (++done % 3 === 0) await new Promise(r => setTimeout(r));
+      } catch (e) { /* leave this image as it is */ }
+    }
+    const saved = await doc.save({ useObjectStreams: true, addDefaultPage: false });
+    return { bytes: saved, info: changed + ' of ' + entries.length + ' images shrunk' };
+  }
+
+  // METHOD 2: draw every page to a picture, compress it as JPEG and build a new PDF from the pictures.
+  async function rasterize(bytes, preset, setStatus) {
+    const { PDFDocument } = await getPdfLib();
+    const lib = await getPdfJs();
+    const task = lib.getDocument({ data: bytes.slice() });
+    const src = await task.promise, out = await PDFDocument.create();
+    try {
+      for (let n = 1; n <= src.numPages; n++) {
+        setStatus('Page ' + n + ' of ' + src.numPages + '…');
+        const page = await src.getPage(n), pt = page.getViewport({ scale: 1 });
+        let scale = preset.dpi / 72;
+        const px = pt.width * pt.height * scale * scale;
+        if (px > 12e6) scale *= Math.sqrt(12e6 / px);
+        const canvas = await renderPage(src, n, scale);
+        const jpg = new Uint8Array(await (await canvasToJpeg(canvas, preset.jpeg)).arrayBuffer());
+        canvas.width = canvas.height = 0;
+        const img = await out.embedJpg(jpg);
+        out.addPage([pt.width, pt.height]).drawImage(img, { x: 0, y: 0, width: pt.width, height: pt.height });
+        if (n % 3 === 0) await new Promise(r => setTimeout(r));
+      }
+    } finally { task.destroy(); }
+    return { bytes: await out.save({ useObjectStreams: true }), info: 'pages converted to pictures' };
+  }
 
   function loadFile(file) {
-    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
-      toast('Please select a PDF file', 'error'); return;
-    }
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF file', 'error'); return; }
     currentFile = file;
-    controls.hidden = false;
-    fileList.hidden = false;
-    actionRow.hidden = false;
-    summary.hidden = true;
+    controls.hidden = false; fileList.hidden = false; actionRow.hidden = false; summary.hidden = true;
     fileList.innerHTML = `<div class="file-item">
       <div class="file-thumb">PDF</div>
-      <div class="file-meta"><div class="file-name">${file.name}</div><div class="file-size">${fmt(file.size)}</div></div>
+      <div class="file-meta"><div class="file-name">${esc(file.name)}</div><div class="file-size">${fmt(file.size)}</div></div>
       <span class="file-status pending">Ready</span>
     </div>`;
   }
@@ -97,25 +226,31 @@
   runBtn.addEventListener('click', async () => {
     if (!currentFile) return;
     runBtn.disabled = true;
-    btnLabel.innerHTML = '<span class="spinner"></span> Compressing&hellip;';
+    const setStatus = s => { btnLabel.innerHTML = '<span class="spinner"></span> ' + s; };
+    setStatus('Compressing…');
     try {
-      const { PDFDocument } = await getPdfLib();
-      const ab = await currentFile.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(ab, { ignoreEncryption: true });
-      const compressed = await pdfDoc.save({ useObjectStreams: true });
-      const blob = new Blob([compressed], { type: 'application/pdf' });
-
+      const bytes = new Uint8Array(await currentFile.arrayBuffer());
+      const preset = PRESET[radio('qlvl')], mode = radio('mode');
+      const r = mode === 'raster' ? await rasterize(bytes, preset, setStatus) : await recompressImages(bytes, preset, setStatus);
       const statusEl = fileList.querySelector('.file-status');
-      statusEl.textContent = savings(currentFile.size, blob.size);
-      statusEl.className = 'file-status done';
-
-      const outName = stem(currentFile.name) + '_compressed.pdf';
+      const smaller = r.bytes.length < currentFile.size;
+      const blob = new Blob([smaller ? r.bytes : bytes], { type: 'application/pdf' });
+      const outName = stem(currentFile.name) + (mode === 'raster' ? '_smallest' : '_compressed') + '.pdf';
+      let msg;
+      if (smaller) {
+        statusEl.textContent = savings(currentFile.size, blob.size); statusEl.className = 'file-status done';
+        msg = `<strong>${savings(currentFile.size, blob.size)}</strong><br><span class="opt-note">${r.info}</span>`;
+      } else {
+        statusEl.textContent = 'Already small'; statusEl.className = 'file-status done';
+        msg = `<strong>This PDF could not be made smaller with these settings.</strong><br><span class="opt-note">${mode === 'images'
+          ? 'It has few or no photos to shrink. Try "Smallest size" or the "Small file" quality level.'
+          : 'It is already very compact. Try the "Small file" quality level.'} Your original file is unchanged.</span>`;
+      }
       summary.hidden = false;
-      summary.innerHTML = `<strong>${savings(currentFile.size, blob.size)}</strong><br>
-        <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
-      $('#dl-btn').addEventListener('click', () => download(blob, outName));
-      toast('PDF compressed successfully!', 'success');
-    } catch(e) {
+      summary.innerHTML = msg + (smaller ? `<div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download compressed PDF</button></div>` : '');
+      if (smaller) $('#dl-btn').addEventListener('click', () => download(blob, outName));
+      toast(smaller ? 'PDF compressed!' : 'No smaller version possible', smaller ? 'success' : 'info');
+    } catch (e) {
       toast('Error: ' + e.message, 'error');
     }
     runBtn.disabled = false;

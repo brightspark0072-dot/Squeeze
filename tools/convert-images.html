@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Convert Images - Squeeze</title>
 <meta name="description" content="Convert image formats offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -111,7 +111,7 @@
         c.getContext('2d').drawImage(bmp, 0, 0);
         bmp.close?.();
         const blob = await new Promise(r => c.toBlob(r, outFmt, q));
-        const outName = stem(f.name) + '.' + ext;
+        const outName = stem(f.name) + '_converted.' + ext;
         results.push({ blob, name: outName });
         st.textContent = fmt(f.size) + ' \u2192 ' + fmt(blob.size); st.className = 'file-status done';
         act.hidden = false;
@@ -129,7 +129,7 @@
       const JSZip = await getJsZip();
       const zip = new JSZip();
       for (const r of results) zip.file(r.name, r.blob);
-      download(await zip.generateAsync({ type: 'blob' }), 'converted_images.zip');
+      download(await zip.generateAsync({ type: 'blob' }), nameFor(images) + '_converted.zip');
     });
     toast('All converted!', 'success');
     $('#run-btn').disabled = false; $('#run-btn').innerHTML = '&#9889; Convert All';
