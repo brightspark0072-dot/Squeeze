@@ -57,8 +57,15 @@
     <div class="control-row">
       <span class="control-label">Font Size</span>
       <div class="slider-wrap">
-        <input type="range" id="font-sz" min="8" max="24" value="12">
-        <span class="slider-val" id="fs-val">12pt</span>
+        <input type="range" id="font-sz" min="10" max="72" value="28">
+        <span class="slider-val" id="fs-val">28pt</span>
+      </div>
+    </div>
+    <div class="control-row">
+      <span class="control-label">Darkness</span>
+      <div class="slider-wrap">
+        <input type="range" id="num-op" min="30" max="100" value="100">
+        <span class="slider-val" id="op-val">100%</span>
       </div>
     </div>
     <div class="control-row">
@@ -86,6 +93,7 @@
   let currentFile = null, pdfDoc = null;
 
   fontSz.addEventListener('input', () => fsVal.textContent = fontSz.value + 'pt');
+  $('#num-op').addEventListener('input', e => $('#op-val').textContent = e.target.value + '%');
 
   async function loadFile(file) {
     if (!file.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
@@ -102,29 +110,32 @@
     $('#run-btn').disabled = true; $('#run-btn').innerHTML = '<span class="spinner"></span> Adding numbers...';
     try {
       const { PDFDocument, StandardFonts, rgb } = await getPdfLib();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const sz = parseInt(fontSz.value);
+      const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const baseSz = parseInt(fontSz.value);
+      const opac = parseInt($('#num-op').value) / 100;
       const startNum = parseInt($('#start-num').value) || 1;
       const skipFirst = $('#skip-first').checked;
       const pos = document.querySelector('input[name=pos]:checked').value;
       const numFmt = document.querySelector('input[name=fmt]:checked').value;
       const total = pdfDoc.getPageCount();
       const pages = pdfDoc.getPages();
-      const margin = 24;
+      const margin0 = 28;
 
       pages.forEach((page, i) => {
         if (skipFirst && i === 0) return;
         const { width, height } = page.getSize();
+        const sz = Math.max(6, Math.round(baseSz * Math.min(width, height) / 595)); // sized relative to an A4 page
         const num = startNum + (skipFirst ? i - 1 : i);
         let text = String(num);
         if (numFmt === 'n-of-N') text = num + ' of ' + (skipFirst ? total - 1 : total);
         if (numFmt === 'Page-n') text = 'Page ' + num;
         const tw = font.widthOfTextAtSize(text, sz);
+        const margin = Math.round(margin0 * sz / baseSz);
         let x = margin, y = margin;
         if (pos.includes('center')) x = (width - tw) / 2;
         if (pos.includes('right')) x = width - tw - margin;
         if (pos.includes('top')) y = height - sz - margin;
-        page.drawText(text, { x, y, size: sz, font, color: rgb(0.3,0.3,0.3), opacity: 0.7 });
+        page.drawText(text, { x, y, size: sz, font, color: rgb(0.1,0.1,0.1), opacity: opac });
       });
 
       const bytes = await pdfDoc.save();
