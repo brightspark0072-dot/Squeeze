@@ -1,20 +1,13 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Merge PDF - Squeeze</title>
 <meta name="description" content="Combine multiple PDFs into one offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
-<style>
-.file-item { cursor: grab; user-select: none; }
-.file-item.dragging { opacity: 0.4; border: 2px dashed var(--ac); }
-.file-item.drag-over { border-color: var(--ac2); background: rgba(167,139,250,0.08); }
-.drag-handle { cursor: grab; color: var(--mu); padding: 0 6px; font-size: 1.1rem; }
-.page-count { font-size: 0.78rem; color: var(--mu); }
-</style>
 </head>
 <body class="tool-page">
 <header class="site-header">
@@ -119,7 +112,7 @@
       summary.hidden = false;
       summary.innerHTML = `<strong>${files.length} PDFs merged &rarr; ${fmt(blob.size)}</strong><br>
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download merged.pdf</button></div>`;
-      $('#dl-btn').addEventListener('click', () => download(blob, 'merged.pdf'));
+      $('#dl-btn').addEventListener('click', () => download(blob, nameFor(files) + '_merged.pdf'));
       toast('PDFs merged!', 'success');
     } catch(e) { toast('Error: ' + e.message, 'error'); }
     runBtn.disabled = false; runBtn.innerHTML = '&#9889; Merge PDFs';

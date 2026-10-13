@@ -1,24 +1,13 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Rotate PDF - Squeeze</title>
 <meta name="description" content="Rotate PDF pages offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
-<style>
-.page-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:12px; margin-top:16px; }
-.page-thumb { border:2px solid var(--gb); border-radius:10px; overflow:hidden; position:relative; cursor:pointer; aspect-ratio:3/4; background:rgba(255,255,255,0.04); display:flex; flex-direction:column; align-items:center; justify-content:center; transition:all .15s; }
-.page-thumb:hover { border-color:var(--ac); }
-.page-thumb canvas { max-width:100%; max-height:75%; transition:transform 0.3s; }
-.page-num { position:absolute; bottom:4px; left:0; right:0; text-align:center; font-size:.72rem; font-weight:700; color:var(--mu); }
-.rot-badge { position:absolute; top:4px; right:4px; font-size:.65rem; font-weight:700; background:var(--ac2); color:#080c1e; border-radius:6px; padding:1px 5px; display:none; }
-.rot-btns { display:flex; gap:4px; justify-content:center; padding:4px 0 2px; }
-.rot-btn { background:none; border:none; cursor:pointer; color:var(--mu); font-size:1rem; padding:2px 4px; border-radius:4px; transition:color .1s, background .1s; }
-.rot-btn:hover { color:var(--ac); background:rgba(125,211,252,.08); }
-</style>
 </head>
 <body class="tool-page">
 <header class="site-header">
@@ -66,13 +55,13 @@
 (async () => {
   const fileIn = $('#file-in'), drop = $('#drop'), pageGrid = $('#page-grid');
   const actionRow = $('#action-row'), summary = $('#summary'), ctrlBar = $('#ctrl-bar');
-  let pdfDoc = null, pdfJsDoc = null, totalPages = 0, rotations = [];
+  let pdfDoc = null, pdfJsDoc = null, totalPages = 0, rotations = [], srcName = 'document';
 
   async function loadPdf(file) {
     if (!file.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
     toast('Loading...', 'info');
     try {
-      const ab = await file.arrayBuffer();
+      const ab = await file.arrayBuffer(); srcName = stem(file.name);
       const { PDFDocument } = await getPdfLib();
       pdfDoc = await PDFDocument.load(ab, { ignoreEncryption: true });
       totalPages = pdfDoc.getPageCount();
@@ -141,7 +130,7 @@
       summary.hidden = false;
       summary.innerHTML = `<strong>Rotated PDF ready &mdash; ${fmt(blob.size)}</strong><br>
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
-      $('#dl-btn').addEventListener('click', () => download(blob, 'rotated.pdf'));
+      $('#dl-btn').addEventListener('click', () => download(blob, srcName + '_rotated.pdf'));
       toast('PDF rotated!', 'success');
     } catch(e) { toast('Error: ' + e.message, 'error'); }
   });

@@ -5,23 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Organize PDF - Squeeze</title>
 <meta name="description" content="Rotate, reorder and delete PDF pages offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
-<style>
-.page-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; margin-top:16px; }
-.pg { border:2px solid var(--gb); border-radius:12px; position:relative; background:rgba(255,255,255,0.04); display:flex; flex-direction:column; align-items:center; padding:8px 4px 6px; gap:4px; cursor:grab; transition:opacity .15s, border-color .15s; }
-.pg:hover { border-color:var(--ac); }
-.pg.del { opacity:.3; }
-.pg.over { border-color:var(--ac2); }
-.pg-img { width:104px; height:104px; display:grid; place-items:center; overflow:hidden; color:var(--mu); font-size:.7rem; }
-.pg-img canvas { background:#fff; border-radius:3px; box-shadow:0 2px 8px rgba(0,0,0,.4); transition:transform .2s; }
-.pg-num { font-size:.72rem; font-weight:700; color:var(--mu); }
-.pg-btns { display:flex; gap:2px; }
-.pg-btns button { background:none; border:none; cursor:pointer; color:var(--mu); font-size:1rem; padding:3px 6px; border-radius:6px; }
-.pg-btns button:hover:not(:disabled) { color:var(--ac); background:rgba(125,211,252,.1); }
-.pg-btns button:disabled { opacity:.3; cursor:not-allowed; }
-</style>
 </head>
 <body class="tool-page">
 <header class="site-header">
@@ -161,7 +147,7 @@
       const blob = new Blob([await out.save()], { type: 'application/pdf' });
       summary.hidden = false;
       summary.innerHTML = '<strong>PDF ready &mdash; ' + keep.length + ' pages, ' + fmt(blob.size) + '</strong><br><div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>';
-      $('#dl-btn').addEventListener('click', () => download(blob, name + '-organized.pdf'));
+      $('#dl-btn').addEventListener('click', () => download(blob, name + '_organized.pdf'));
       toast('PDF ready!', 'success');
     } catch (e) { toast('Error: ' + e.message, 'error'); }
   });

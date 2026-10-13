@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Compress Images - Squeeze</title>
 <meta name="description" content="Compress JPG, PNG, WebP images offline.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -155,7 +155,7 @@
       const zip = new JSZip();
       for (const r of results) zip.file(r.name, r.blob);
       const zb = await zip.generateAsync({ type: 'blob' });
-      download(zb, 'compressed_images.zip');
+      download(zb, nameFor(images) + '_compressed.zip');
     });
     toast('All compressed!', 'success');
     $('#run-btn').disabled = false; $('#run-btn').innerHTML = '&#9889; Compress All';

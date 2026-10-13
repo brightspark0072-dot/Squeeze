@@ -50,12 +50,29 @@ function setupDrop(zone, onFiles, multiple = false, accept = null) {
 }
 
 // ===== DOWNLOAD BLOB =====
+// Adds a date-time stamp so every file you save has a unique name (e.g. report_merged_261012-013045.pdf).
+function stamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+function uniqueName(name) {
+  const m = /^(.*?)(\.[^.]+)?$/.exec(name);
+  return m[1] + '_' + stamp() + (m[2] || '');
+}
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = name;
+  a.href = url; a.download = uniqueName(name);
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+// "report" or "report_and_2_more" for a list of files
+function nameFor(files) {
+  const list = [...files];
+  if (!list.length) return 'files';
+  return stem(list[0].name) + (list.length > 1 ? '_and_' + (list.length - 1) + '_more' : '');
 }
 
 // ===== SELF-HOSTED LIBRARIES (in /vendor, cached by the service worker, so they work offline) =====
@@ -110,3 +127,33 @@ async function renderPage(pdfDoc, pageNum, scale = 1.5) {
 function stem(filename) {
   return filename.replace(/\.[^.]+$/, '');
 }
+
+
+// ===== "YOU PICKED THESE FILES" LABEL (shown under every drop zone) =====
+function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+(function initPicked() {
+  function init() {
+    const zone = document.querySelector('.drop-zone');
+    const input = zone && zone.querySelector('input[type=file]');
+    if (!input || document.getElementById('file-list')) return; // pages with their own file list already show names
+    const bar = document.createElement('div');
+    bar.className = 'picked'; bar.hidden = true; bar.setAttribute('aria-live', 'polite');
+    zone.insertAdjacentElement('afterend', bar);
+    const tokens = (input.accept || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    const okFile = f => !tokens.length || tokens.some(t => t.startsWith('.') ? f.name.toLowerCase().endsWith(t) : t.endsWith('/*') ? f.type.startsWith(t.slice(0, -1)) : f.type === t);
+    let list = [];
+    function show(files) {
+      files = files.filter(okFile);
+      if (!files.length) return;
+      list = input.multiple ? list.concat(files) : files.slice(0, 1);
+      bar.innerHTML = '<span class="picked-title">Selected file' + (list.length > 1 ? 's (' + list.length + ')' : '') + '</span>' +
+        list.map(f => '<span class="picked-chip" title="' + esc(f.name) + '"><b>\u2713</b> <span class="picked-name">' + esc(f.name) + '</span> <small>' + fmt(f.size) + '</small></span>').join('');
+      bar.hidden = false;
+    }
+    function clear() { list = []; bar.hidden = true; bar.textContent = ''; }
+    input.addEventListener('change', () => show([...input.files]), true);
+    zone.addEventListener('drop', e => { if (e.dataTransfer) show([...e.dataTransfer.files]); }, true);
+    document.querySelectorAll('#reset-btn, #btn-reset, #btn-clear').forEach(b => b.addEventListener('click', clear));
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();

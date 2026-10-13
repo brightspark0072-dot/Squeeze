@@ -5,15 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PDF to Word / Text - Squeeze</title>
 <meta name="description" content="Extract text and convert PDF documents to Word (.doc / .txt) format offline in your browser.">
-<meta name="theme-color" content="#080c1e">
+<meta name="theme-color" content="#2A4058">
 <link rel="icon" type="image/png" href="../icon-192.png">
 <link rel="stylesheet" href="../style.css">
-<style>
-.preview-box { background: rgba(0,0,0,0.3); border: 1px solid var(--b); border-radius: 12px; padding: 20px; max-height: 450px; overflow-y: auto; font-family: monospace; font-size: 0.95rem; white-space: pre-wrap; word-break: break-word; color: var(--fg); line-height: 1.6; }
-.stats-bar { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-.stat-pill { background: rgba(255,255,255,0.06); padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; color: var(--mu); }
-.stat-pill strong { color: var(--fg); }
-</style>
 </head>
 <body class="tool-page">
 <header class="site-header">
@@ -212,8 +206,7 @@ $('#btn-export').addEventListener('click', () => {
     const docContent = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head><title>${escapeHtml(baseName)}</title>
     <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
-    <style>body { font-family: Arial, sans-serif; }</style>
-    </head>
+        </head>
     <body>${htmlBody}</body></html>`;
 
     const blob = new Blob(['\ufeff' + docContent], { type: 'application/msword' });

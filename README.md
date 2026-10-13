@@ -19,7 +19,9 @@ Copy a page in `tools/`, include `shared.js` (it provides `getPdfLib()`, `getPdf
 
 ## Limits
 - Not built yet: Protect/Unlock PDF (needs real encryption such as qpdf compiled to WebAssembly; pdf-lib cannot encrypt), OCR, real PDF to Word layout.
-- Compress PDF re-saves with pdf-lib, so savings are small. Strong compression needs Ghostscript-WASM (AGPL: keep the repo public).
+- Compress PDF has two modes: *Recompress images* (keeps text selectable; re-encodes embedded images as JPEG) and *Rasterize pages* (smallest, but text becomes images). Ghostscript-grade compression would need Ghostscript-WASM (AGPL: keep the repo public).
+- Output files are named `<original>_<action>_<YYMMDD-HHMMSS>.ext` via `uniqueName()`/`nameFor()` in `tools/shared.js`.
+- Theme: slate blue + cream, 60/30/10 (see `:root` in `style.css`).
 - Watermark and Page Numbers use a Latin-only font and do not yet account for pages that are already rotated.
 - Password-protected PDFs are not supported. Signed PDFs lose their signature when changed.
 - Large PDFs can run out of memory on phones (esp. iOS Safari).
