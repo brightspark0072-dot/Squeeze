@@ -1,0 +1,28 @@
+# One-time helper: downloads the video library (Mediabunny) into vendor/mediabunny on a branch.
+name: Vendor Mediabunny
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Fetch files
+        run: |
+          mkdir -p /tmp/m && cd /tmp/m && npm init -y >/dev/null && npm install mediabunny
+          D="$GITHUB_WORKSPACE/vendor/mediabunny"; mkdir -p "$D"
+          find node_modules/mediabunny -maxdepth 4 -name "*.mjs" | head -30
+          F=$(find node_modules/mediabunny/dist -name "mediabunny.min.mjs" | head -1)
+          test -n "$F" && cp "$F" "$D/mediabunny.min.mjs"
+          cp node_modules/mediabunny/LICENSE "$D/" 2>/dev/null || true
+          node -e "console.log(require('/tmp/m/node_modules/mediabunny/package.json').version)" > "$D/VERSION"
+          ls -la "$D"
+      - name: Push branch
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git checkout -b add-mediabunny-files
+          git add vendor/mediabunny && git commit -m "Add Mediabunny video library"
+          git push -f origin add-mediabunny-files
