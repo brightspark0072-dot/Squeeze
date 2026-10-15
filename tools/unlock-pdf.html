@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Unlock PDF - Squeeze</title>
+<meta name="description" content="Remove a PDF password offline.">
+<meta name="theme-color" content="#2A4058">
+<link rel="icon" type="image/png" href="../icon-192.png">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="tool-page">
+<header class="site-header">
+  <div class="header-inner">
+    <a href="../index.html" class="logo"><span class="logo-icon">&#10216;S&#10217;</span><span class="logo-text">Squeeze</span></a>
+    <p class="tagline">100% Offline &middot; Nothing Uploaded</p>
+    <div class="header-badge"><span class="badge-dot"></span><span>Local Processing</span></div>
+  </div>
+</header>
+<div class="tool-page-header">
+  <div>
+    <a href="../index.html" class="back-link">&#8592; All Tools</a>
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div class="tool-page-icon" style="background:linear-gradient(135deg,#f97316,#eab308)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>
+      </div>
+      <div class="tool-page-title"><h1>Unlock PDF</h1><p>Remove the password from a PDF you have the password for</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="max-width:700px;margin:0 auto 20px">
+  <div class="drop-zone" id="drop">
+    <input type="file" id="file-in" accept=".pdf,application/pdf">
+    <span class="drop-icon">&#128275;</span>
+    <p class="drop-text">Drop your protected PDF here</p>
+    <p class="drop-hint">You need to know the password. This tool cannot guess or crack it.</p>
+  </div>
+  <div id="controls" class="controls" hidden>
+    <div class="control-row">
+      <span class="control-label">Password</span>
+      <input type="password" id="pw" autocomplete="off" style="flex:1" placeholder="Open or owner password">
+    </div>
+  </div>
+  <div class="action-row" id="action-row" hidden>
+    <button class="btn-primary" id="run-btn">&#128275; Remove Password</button>
+    <button class="btn-secondary" id="reset-btn">&#128472; Reset</button>
+  </div>
+  <div class="result-summary" id="summary" hidden></div>
+</div>
+<script src="shared.js"></script>
+<script src="pdfcrypt.js"></script>
+<script>
+(() => {
+  const fileIn = $('#file-in'), drop = $('#drop'), controls = $('#controls'), actionRow = $('#action-row'), summary = $('#summary');
+  let cur = null, bytes = null;
+  async function loadFile(f) {
+    if (!f.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
+    try {
+      const ab = new Uint8Array(await f.arrayBuffer()); await getPdfLib();
+      if (!(await PDFCrypt.isEncryptedBytes(ab))) { toast('This PDF has no password, nothing to remove.', 'info'); return; }
+      cur = f; bytes = ab; controls.hidden = false; actionRow.hidden = false; summary.hidden = true; $('#pw').focus();
+    } catch (e) { toast('Could not read this PDF: ' + e.message, 'error'); }
+  }
+  $('#run-btn').addEventListener('click', async () => {
+    if (!bytes) return;
+    const btn = $('#run-btn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Unlocking...';
+    try {
+      await getPdfLib();
+      const out = await PDFCrypt.unlock(bytes, $('#pw').value);
+      const blob = new Blob([out], { type: 'application/pdf' });
+      summary.hidden = false;
+      summary.innerHTML = `<strong>Password removed &rarr; ${fmt(blob.size)}</strong><br><div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
+      $('#dl-btn').addEventListener('click', () => download(blob, stem(cur.name) + '_unlocked.pdf'));
+      toast('Password removed!', 'success');
+    } catch (e) { toast(e.message === 'WRONG_PASSWORD' ? 'That password is not correct' : 'Error: ' + e.message, 'error'); }
+    btn.disabled = false; btn.innerHTML = '&#128275; Remove Password';
+  });
+  fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadFile(fileIn.files[0]); });
+  setupDrop(drop, files => loadFile(files[0]));
+  $('#reset-btn').addEventListener('click', () => { cur = bytes = null; controls.hidden = actionRow.hidden = summary.hidden = true; fileIn.value = ''; $('#pw').value = ''; });
+})();
+</script>
+</body>
+</html>

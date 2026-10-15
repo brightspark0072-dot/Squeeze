@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Protect PDF - Squeeze</title>
+<meta name="description" content="Add a password to a PDF offline.">
+<meta name="theme-color" content="#2A4058">
+<link rel="icon" type="image/png" href="../icon-192.png">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="tool-page">
+<header class="site-header">
+  <div class="header-inner">
+    <a href="../index.html" class="logo"><span class="logo-icon">&#10216;S&#10217;</span><span class="logo-text">Squeeze</span></a>
+    <p class="tagline">100% Offline &middot; Nothing Uploaded</p>
+    <div class="header-badge"><span class="badge-dot"></span><span>Local Processing</span></div>
+  </div>
+</header>
+<div class="tool-page-header">
+  <div>
+    <a href="../index.html" class="back-link">&#8592; All Tools</a>
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div class="tool-page-icon" style="background:linear-gradient(135deg,#f97316,#eab308)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </div>
+      <div class="tool-page-title"><h1>Protect PDF</h1><p>Add a password so only people who know it can open the file</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="max-width:700px;margin:0 auto 20px">
+  <div class="drop-zone" id="drop">
+    <input type="file" id="file-in" accept=".pdf,application/pdf">
+    <span class="drop-icon">&#128274;</span>
+    <p class="drop-text">Drop your PDF here</p>
+    <p class="drop-hint">It will need a password to open. Encrypted with AES-256, on this device only.</p>
+  </div>
+  <div id="controls" class="controls" hidden>
+    <div class="control-row">
+      <span class="control-label">Password to open</span>
+      <input type="password" id="pw1" autocomplete="new-password" style="flex:1" placeholder="Required">
+    </div>
+    <div class="control-row">
+      <span class="control-label">Repeat password</span>
+      <input type="password" id="pw2" autocomplete="new-password" style="flex:1" placeholder="Type it again">
+    </div>
+    <div class="control-row">
+      <span class="control-label">Owner password</span>
+      <input type="password" id="pw-owner" autocomplete="new-password" style="flex:1" placeholder="Optional. Needed to change the limits below">
+    </div>
+    <div class="control-row">
+      <span class="control-label">Allow</span>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="checkbox" id="a-print" checked> <span>Printing</span></label>
+        <label class="radio-pill"><input type="checkbox" id="a-copy" checked> <span>Copying text</span></label>
+        <label class="radio-pill"><input type="checkbox" id="a-edit" checked> <span>Editing</span></label>
+      </div>
+    </div>
+    <p class="drop-hint" style="margin:6px 0 0">There is no way to recover a forgotten password. Keep it somewhere safe. Limits on printing, copying and editing are respected by most PDF apps but are not as strong as the password itself.</p>
+  </div>
+  <div class="action-row" id="action-row" hidden>
+    <button class="btn-primary" id="run-btn">&#128274; Protect PDF</button>
+    <button class="btn-secondary" id="reset-btn">&#128472; Reset</button>
+  </div>
+  <div class="result-summary" id="summary" hidden></div>
+</div>
+<script src="shared.js"></script>
+<script src="pdfcrypt.js"></script>
+<script>
+(() => {
+  const fileIn = $('#file-in'), drop = $('#drop'), controls = $('#controls'), actionRow = $('#action-row'), summary = $('#summary');
+  let cur = null, bytes = null;
+  async function loadFile(f) {
+    if (!f.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
+    try {
+      const ab = new Uint8Array(await f.arrayBuffer()); await getPdfLib();
+      if (await PDFCrypt.isEncryptedBytes(ab)) { toast('This PDF already has a password. Use Unlock PDF first.', 'error'); return; }
+      cur = f; bytes = ab; controls.hidden = false; actionRow.hidden = false; summary.hidden = true;
+    } catch (e) { toast('Could not read this PDF: ' + e.message, 'error'); }
+  }
+  $('#run-btn').addEventListener('click', async () => {
+    if (!bytes) return;
+    const p1 = $('#pw1').value;
+    if (!p1) { toast('Type a password first', 'error'); return; }
+    if (p1 !== $('#pw2').value) { toast('The two passwords do not match', 'error'); return; }
+    const btn = $('#run-btn'); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Encrypting...';
+    try {
+      await getPdfLib();
+      const out = await PDFCrypt.protect(bytes, { user: p1, owner: $('#pw-owner').value, allowPrint: $('#a-print').checked, allowCopy: $('#a-copy').checked, allowEdit: $('#a-edit').checked });
+      const blob = new Blob([out], { type: 'application/pdf' });
+      summary.hidden = false;
+      summary.innerHTML = `<strong>Protected &rarr; ${fmt(blob.size)}</strong><br><div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
+      $('#dl-btn').addEventListener('click', () => download(blob, stem(cur.name) + '_protected.pdf'));
+      toast('PDF protected!', 'success');
+    } catch (e) { toast('Error: ' + e.message, 'error'); }
+    btn.disabled = false; btn.innerHTML = '&#128274; Protect PDF';
+  });
+  fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadFile(fileIn.files[0]); });
+  setupDrop(drop, files => loadFile(files[0]));
+  $('#reset-btn').addEventListener('click', () => { cur = bytes = null; controls.hidden = actionRow.hidden = summary.hidden = true; fileIn.value = ''; ['#pw1', '#pw2', '#pw-owner'].forEach(i => $(i).value = ''); });
+})();
+</script>
+</body>
+</html>
