@@ -31,3 +31,6 @@ GitHub Pages runs Jekyll by default, which silently **does not publish any file 
 
 ## Protect / Unlock PDF
 `tools/pdfcrypt.js` is our own implementation (no library): Protect writes AES-256 (PDF 2.0, revision 6); Unlock opens revisions 2, 3, 4 (RC4, AES-128) and 6 (AES-256) and unpacks encrypted object streams. It was checked against `qpdf`. It needs https or localhost (WebCrypto).
+
+## OCR PDF
+`tools/ocr-pdf.html` renders each page (300 dpi), cleans it, reads it with Tesseract (`vendor/tesseract`, files fetched by the *Vendor Tesseract* workflow) and writes an invisible text layer (glyphless Type0 font + ToUnicode) onto the original page, so the PDF looks identical but is searchable. Printed/typed text only; sideways pages need rotating first; Hindi data is cached the first time it is used online.

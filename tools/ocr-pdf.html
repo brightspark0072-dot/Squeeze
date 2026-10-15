@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>OCR PDF - Squeeze</title>
+<meta name="description" content="Make scanned PDFs searchable offline. You get the same PDF back.">
+<meta name="theme-color" content="#2A4058">
+<link rel="icon" type="image/png" href="../icon-192.png">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="tool-page">
+<header class="site-header">
+  <div class="header-inner">
+    <a href="../index.html" class="logo"><span class="logo-icon">&#10216;S&#10217;</span><span class="logo-text">Squeeze</span></a>
+    <p class="tagline">100% Offline &middot; Nothing Uploaded</p>
+    <div class="header-badge"><span class="badge-dot"></span><span>Local Processing</span></div>
+  </div>
+</header>
+<div class="tool-page-header">
+  <div>
+    <a href="../index.html" class="back-link">&#8592; All Tools</a>
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div class="tool-page-icon" style="background:linear-gradient(135deg,#f97316,#eab308)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="15" x2="13" y2="15"/></svg>
+      </div>
+      <div class="tool-page-title"><h1>OCR PDF</h1><p>Make a scanned PDF searchable. You get the same PDF back, pages unchanged.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="max-width:700px;margin:0 auto 20px">
+  <div class="drop-zone" id="drop">
+    <input type="file" id="file-in" accept=".pdf,application/pdf">
+    <span class="drop-icon">&#128269;</span>
+    <p class="drop-text">Drop your scanned PDF here</p>
+    <p class="drop-hint">Adds a hidden text layer so you can search and copy. Works best on printed or typed text.</p>
+  </div>
+  <div id="controls" class="controls" hidden>
+    <div class="control-row">
+      <span class="control-label">Language</span>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="checkbox" id="l-eng" checked> <span>English</span></label>
+        <label class="radio-pill"><input type="checkbox" id="l-hin"> <span>Hindi</span></label>
+      </div>
+    </div>
+    <div class="control-row">
+      <span class="control-label">Quality</span>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="radio" name="dpi" value="200"> <span>Fast</span></label>
+        <label class="radio-pill"><input type="radio" name="dpi" value="300" checked> <span>Accurate</span></label>
+      </div>
+    </div>
+    <div class="control-row">
+      <span class="control-label">Options</span>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="checkbox" id="o-clean" checked> <span>Clean up image first</span></label>
+        <label class="radio-pill"><input type="checkbox" id="o-force"> <span>Also read pages that already have text</span></label>
+      </div>
+    </div>
+  </div>
+  <div class="action-row" id="action-row" hidden>
+    <button class="btn-primary" id="run-btn">&#9889; Make Searchable</button>
+    <button class="btn-secondary" id="reset-btn">&#128472; Reset</button>
+  </div>
+  <div id="progress" class="result-summary" hidden></div>
+  <div class="result-summary" id="summary" hidden></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+(() => {
+  const fileIn = $('#file-in'), drop = $('#drop'), controls = $('#controls'), actionRow = $('#action-row'), summary = $('#summary'), prog = $('#progress');
+  const BASE = new URL('../vendor/tesseract/', location.href).href;
+  let cur = null, bytes = null, cancel = false;
+
+  async function loadFile(f) {
+    if (!f.name.toLowerCase().endsWith('.pdf')) { toast('Please select a PDF', 'error'); return; }
+    cur = f; bytes = new Uint8Array(await f.arrayBuffer());
+    controls.hidden = false; actionRow.hidden = false; summary.hidden = true; prog.hidden = true;
+  }
+
+  function loadScript(src) {
+    return new Promise((res, rej) => { if (window.Tesseract) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load the OCR engine. Open this tool once while online.')); document.head.appendChild(s); });
+  }
+
+  // Grayscale and stretch contrast so faint or shadowed scans read better.
+  function clean(canvas) {
+    const ctx = canvas.getContext('2d'), im = ctx.getImageData(0, 0, canvas.width, canvas.height), d = im.data, hist = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 4) { const g = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; d[i] = g; hist[g]++; }
+    // Ink is a tiny share of a page, so: black point near the darkest ink, white point at the typical paper level (the median).
+    const n = canvas.width * canvas.height; let lo = 0, hi = 0, a = 0;
+    for (; lo < 255 && (a += hist[lo]) < n * 0.005; lo++);
+    for (a = 0; hi < 255 && (a += hist[hi]) < n * 0.5; hi++);
+    if (hi - lo >= 60) for (let i = 0; i < d.length; i += 4) { const v = Math.max(0, Math.min(255, (d[i] - lo) * 255 / (hi - lo))); d[i] = d[i + 1] = d[i + 2] = v; }
+    else for (let i = 0; i < d.length; i += 4) d[i + 1] = d[i + 2] = d[i];
+    ctx.putImageData(im, 0, 0);
+  }
+
+  // Invisible text: a font with no drawn glyphs; a ToUnicode map lets viewers search and copy the words.
+  function makeFont(L, doc) {
+    const ctx = doc.context, map = new Map(); // char -> cid
+    const cidOf = ch => { let c = map.get(ch); if (!c) { c = map.size + 1; map.set(ch, c); } return c; };
+    const fontRef = ctx.nextRef(), descRef = ctx.nextRef(), cidRef = ctx.nextRef(), tuRef = ctx.nextRef(), fdRef = ctx.nextRef();
+    const finish = () => {
+      const u16 = ch => { const cp = ch.codePointAt(0); if (cp < 0x10000) return cp.toString(16).padStart(4, '0'); const x = cp - 0x10000; return (0xD800 + (x >> 10)).toString(16) + (0xDC00 + (x & 1023)).toString(16); };
+      const ents = Array.from(map, ([ch, cid]) => '<' + cid.toString(16).padStart(4, '0') + '> <' + u16(ch) + '>');
+      let cm = '/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange\n';
+      for (let i = 0; i < ents.length; i += 100) { const part = ents.slice(i, i + 100); cm += part.length + ' beginbfchar\n' + part.join('\n') + '\nendbfchar\n'; }
+      cm += 'endcmap CMapName currentdict /CMap defineresource pop end end';
+      ctx.assign(tuRef, ctx.stream(cm));
+      ctx.assign(fdRef, ctx.obj({ Type: 'FontDescriptor', FontName: 'GlyphLessFont', Flags: 4, FontBBox: [0, -200, 1000, 800], ItalicAngle: 0, Ascent: 800, Descent: -200, CapHeight: 700, StemV: 80 }));
+      ctx.assign(cidRef, ctx.obj({ Type: 'Font', Subtype: 'CIDFontType2', BaseFont: 'GlyphLessFont', CIDSystemInfo: { Registry: L.PDFString.of('Adobe'), Ordering: L.PDFString.of('Identity'), Supplement: 0 }, FontDescriptor: fdRef, DW: 1000, CIDToGIDMap: 'Identity' }));
+      ctx.assign(fontRef, ctx.obj({ Type: 'Font', Subtype: 'Type0', BaseFont: 'GlyphLessFont', Encoding: 'Identity-H', DescendantFonts: [cidRef], ToUnicode: tuRef }));
+    };
+    return { fontRef, cidOf, finish };
+  }
+
+  function addWords(L, page, font, words, cw, ch) {
+    const { width: W, height: H } = page.getSize(), rot = ((page.getRotation().angle % 360) + 360) % 360;
+    const dw = rot % 180 ? H : W, dh = rot % 180 ? W : H; // size as displayed
+    const ops = [], N = L.PDFNumber.of, O = (n, a) => L.PDFOperator.of(n, a);
+    const rotM = { 0: [1, 0, 0, 1], 90: [0, 1, -1, 0], 180: [-1, 0, 0, -1], 270: [0, -1, 1, 0] }[rot];
+    let used = 0;
+    for (const w of words) {
+      const text = (w.text || '').trim(); if (!text) continue;
+      const chars = Array.from(text), bw = (w.bbox.x1 - w.bbox.x0) * dw / cw, bh = (w.bbox.y1 - w.bbox.y0) * dh / ch;
+      if (bw <= 0 || bh <= 0) continue;
+      const fs = Math.max(2, bh * 0.8), tz = Math.max(1, Math.min(1000, 100 * bw / (chars.length * fs)));
+      const u = w.bbox.x0 * dw / cw, vDown = w.bbox.y1 * dh / ch - bh * 0.2; // baseline in displayed space (y down)
+      let x, y;
+      if (rot === 0) { x = u; y = H - vDown; } else if (rot === 90) { x = vDown; y = u; } else if (rot === 180) { x = W - u; y = vDown; } else { x = W - vDown; y = H - u; }
+      const hex = chars.map(c => font.cidOf(c).toString(16).padStart(4, '0')).join('');
+      ops.push(O('BT', []), O('Tf', [L.PDFName.of('OCRF'), N(fs)]), O('Tz', [N(tz)]), O('Tm', [...rotM.map(N), N(x), N(y)]), O('Tj', [L.PDFHexString.of(hex)]), O('ET', []));
+      used++;
+    }
+    if (!used) return 0;
+    page.node.setFontDictionary(L.PDFName.of('OCRF'), font.fontRef);
+    page.pushOperators(O('q', []), O('Tr', [N(3)]), ...ops, O('Q', []));
+    return used;
+  }
+
+  $('#run-btn').addEventListener('click', async () => {
+    if (!bytes) return;
+    const langs = [$('#l-eng').checked && 'eng', $('#l-hin').checked && 'hin'].filter(Boolean);
+    if (!langs.length) { toast('Pick at least one language', 'error'); return; }
+    const dpi = +document.querySelector('input[name=dpi]:checked').value, doClean = $('#o-clean').checked, force = $('#o-force').checked;
+    const btn = $('#run-btn'); btn.disabled = true; cancel = false; summary.hidden = true; prog.hidden = false;
+    const say = m => prog.innerHTML = m + ' <button class="btn-secondary" id="cancel-btn" style="margin-left:10px">Stop</button>';
+    let worker = null, pdfjsDoc = null;
+    try {
+      say('Loading OCR engine&hellip;');
+      await loadScript(BASE + 'tesseract.min.js');
+      // Fetch the files once through the page so they are saved for offline use.
+      await Promise.all([BASE + 'worker.min.js', BASE + 'tesseract-core-simd-lstm.wasm.js', BASE + 'tesseract-core-lstm.wasm.js', ...langs.map(l => BASE + l + '.traineddata.gz')].map(u => fetch(u).then(r => { if (!r.ok) throw new Error('Missing OCR file: ' + u.split('/').pop()); return r.arrayBuffer(); })));
+      const [pdfjs, L] = await Promise.all([getPdfJs(), getPdfLib()]);
+      const doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true });
+      const task = pdfjs.getDocument({ data: bytes.slice() }); pdfjsDoc = await task.promise;
+      const n = doc.getPageCount();
+      worker = await Tesseract.createWorker(langs, 1, { workerPath: BASE + 'worker.min.js', corePath: BASE.replace(/\/$/, ''), langPath: BASE.replace(/\/$/, ''), workerBlobURL: false, gzip: true, cacheMethod: 'none' });
+      const font = makeFont(L, doc);
+      let done = 0, skipped = 0, words = 0, allText = [];
+      for (let i = 1; i <= n && !cancel; i++) {
+        say('Page ' + i + ' of ' + n + '&hellip;');
+        $('#cancel-btn') && ($('#cancel-btn').onclick = () => { cancel = true; });
+        const pg = await pdfjsDoc.getPage(i);
+        if (!force) { const tc = await pg.getTextContent(); if (tc.items.map(x => x.str).join('').trim().length >= 20) { skipped++; continue; } }
+        const vp1 = pg.getViewport({ scale: 1 });
+        const scale = Math.min(dpi / 72, 4200 / Math.max(vp1.width, vp1.height));
+        const canvas = await renderPage(pdfjsDoc, i, scale);
+        if (doClean) clean(canvas);
+        const { data } = await worker.recognize(canvas);
+        const good = (data.words || []).filter(w => w.confidence >= 25 && /\S/.test(w.text));
+        words += addWords(L, doc.getPage(i - 1), font, good, canvas.width, canvas.height);
+        allText.push(good.map(w => w.text).join(' '));
+        done++; canvas.width = canvas.height = 0;
+      }
+      font.finish();
+      await worker.terminate(); worker = null; pdfjsDoc.destroy && pdfjsDoc.destroy();
+      if (cancel) { prog.hidden = true; toast('Stopped', 'info'); }
+      else if (!words) { prog.hidden = true; summary.hidden = false; summary.innerHTML = '<strong>No text found.</strong><br>' + (skipped ? 'Every page already has text. Tick "Also read pages that already have text" to read them anyway.' : 'The pages may be handwriting or too faint. This tool reads printed or typed text.'); }
+      else {
+        const out = await doc.save({ useObjectStreams: true, updateFieldAppearances: false });
+        const blob = new Blob([out], { type: 'application/pdf' });
+        prog.hidden = true; summary.hidden = false;
+        summary.innerHTML = `<strong>Searchable PDF ready &rarr; ${fmt(blob.size)}</strong><br>${words} words found on ${done} page${done === 1 ? '' : 's'}${skipped ? ', ' + skipped + ' skipped (already had text)' : ''}.<br>
+          <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button><button class="btn-secondary" id="copy-btn">Copy text</button></div>
+          <details style="margin-top:10px"><summary>Preview the text found</summary><pre style="white-space:pre-wrap;max-height:260px;overflow:auto;font-size:.85rem"></pre></details>`;
+        const txt = allText.join('\n\n'); summary.querySelector('pre').textContent = txt;
+        $('#dl-btn').addEventListener('click', () => download(blob, stem(cur.name) + '_searchable.pdf'));
+        $('#copy-btn').addEventListener('click', () => navigator.clipboard.writeText(txt).then(() => toast('Copied', 'success'), () => toast('Could not copy', 'error')));
+        toast('Done!', 'success');
+      }
+    } catch (e) { prog.hidden = true; toast('Error: ' + e.message, 'error'); if (worker) worker.terminate(); }
+    btn.disabled = false;
+  });
+
+  fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadFile(fileIn.files[0]); });
+  setupDrop(drop, files => loadFile(files[0]));
+  $('#reset-btn').addEventListener('click', () => { cancel = true; cur = bytes = null; controls.hidden = actionRow.hidden = summary.hidden = prog.hidden = true; fileIn.value = ''; });
+})();
+</script>
+</body>
+</html>
