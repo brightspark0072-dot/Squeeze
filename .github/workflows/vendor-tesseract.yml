@@ -1,0 +1,32 @@
+# One-time helper: downloads the OCR engine (Tesseract) into vendor/tesseract and opens a pull request.
+# Run it from the Actions tab: "Vendor Tesseract" -> Run workflow.
+name: Vendor Tesseract
+on: workflow_dispatch
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Fetch files
+        run: |
+          mkdir -p /tmp/t && cd /tmp/t && npm init -y >/dev/null
+          npm install tesseract.js@5 tesseract.js-core@5 @tesseract.js-data/eng@1 @tesseract.js-data/hin@1
+          D="$GITHUB_WORKSPACE/vendor/tesseract"; mkdir -p "$D"
+          cp node_modules/tesseract.js/dist/tesseract.min.js node_modules/tesseract.js/dist/worker.min.js "$D"/
+          cp node_modules/tesseract.js-core/tesseract-core*.js "$D"/
+          cp node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz "$D"/
+          cp node_modules/@tesseract.js-data/hin/4.0.0_best_int/hin.traineddata.gz "$D"/
+          ls -la "$D"; du -sh "$D"
+      - name: Open pull request
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git checkout -b add-tesseract-files
+          git add vendor/tesseract && git commit -m "Add Tesseract OCR files (English, Hindi)"
+          git push -f origin add-tesseract-files
+          gh pr create --base main --head add-tesseract-files --title "Add Tesseract OCR files" --body "Added by the Vendor Tesseract workflow." || true
