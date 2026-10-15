@@ -157,3 +157,6 @@ function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
+
+// When a new version of the app takes over, reload once so you never keep running stale pages.
+if ('serviceWorker' in navigator) { let had = !!navigator.serviceWorker.controller, rl = false; navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !rl) { rl = true; location.reload(); } had = true; }); }
