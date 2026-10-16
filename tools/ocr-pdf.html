@@ -159,7 +159,7 @@
         catch (e) { throw new Error((name.includes('hin') ? 'Hindi language data is not saved on this device yet (1.4 MB).' : 'The OCR engine (' + name + ') could not be loaded.') + ' If you are offline, connect once to download it, or save it from "Offline use" on the home page.'); }
       }
       const [pdfjs, L] = await Promise.all([getPdfJs(), getPdfLib()]);
-      const doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true });
+      const doc = await loadPdfDoc(bytes);
       task = pdfjs.getDocument({ data: bytes.slice() }); pdfjsDoc = await task.promise;
       const n = doc.getPageCount();
       worker = await Tesseract.createWorker(langs, 1, { workerPath: BASE + 'worker.min.js', corePath: BASE.replace(/\/$/, ''), langPath: BASE.replace(/\/$/, ''), workerBlobURL: false, gzip: true, cacheMethod: 'none' });

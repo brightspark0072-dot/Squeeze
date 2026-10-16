@@ -78,7 +78,7 @@
       const item = document.createElement('div');
       item.className = 'file-item';
       item.innerHTML = `<div class="file-thumb">${ext}</div>
-        <div class="file-meta"><div class="file-name">${f.name}</div><div class="file-size">${fmt(f.size)}</div></div>
+        <div class="file-meta"><div class="file-name">${esc(f.name)}</div><div class="file-size">${fmt(f.size)}</div></div>
         <button class="btn-secondary" onclick="removeFile(${i})" style="padding:4px 10px;font-size:.8rem">&#10005;</button>`;
       fileList.appendChild(item);
     });

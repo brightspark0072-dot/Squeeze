@@ -69,7 +69,7 @@
     try {
       const ab = await file.arrayBuffer();
       const { PDFDocument } = await getPdfLib();
-      pdfDoc = await PDFDocument.load(ab, { ignoreEncryption: true });
+      pdfDoc = await loadPdfDoc(ab);
       totalPages = pdfDoc.getPageCount();
 
       const pdfjsLib = await getPdfJs();
@@ -79,7 +79,7 @@
       await renderPages();
       pageSection.hidden = false; actionRow.hidden = false;
       updateInfo();
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
   }
 
   async function renderPages() {
@@ -135,7 +135,7 @@
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
       $('#dl-btn').addEventListener('click', () => download(blob, srcName + '_pages_' + [...selected].sort((a,b)=>a-b).map(i=>i+1).join('-').slice(0,40) + '.pdf'));
       toast('Pages extracted!', 'success');
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
   });
 
   $('#split-all-btn').addEventListener('click', async () => {
@@ -157,7 +157,7 @@
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download ZIP</button></div>`;
       $('#dl-btn').addEventListener('click', () => download(zipBlob, srcName + '_split_pages.zip'));
       toast('All pages split!', 'success');
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
   });
 
   fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadPdf(fileIn.files[0]); });
