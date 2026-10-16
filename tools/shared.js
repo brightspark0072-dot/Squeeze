@@ -9,11 +9,13 @@ function toast(msg, type = 'info', duration = 3500) {
     wrap = document.createElement('div');
     wrap.id = 'toast-wrap';
     wrap.className = 'toast-wrap';
+    wrap.setAttribute('role', 'status'); wrap.setAttribute('aria-live', 'polite');
     document.body.appendChild(wrap);
   }
   const el = document.createElement('div');
   el.className = 'toast ' + type;
   el.textContent = msg;
+  if (type === 'error') { el.setAttribute('role', 'alert'); duration = Math.max(duration, 7000); }
   wrap.appendChild(el);
   setTimeout(() => el.remove(), duration);
 }
