@@ -35,7 +35,7 @@
     <h1>Your Offline PDF &amp; File Suite</h1>
     <p class="hero-sub">All the tools of iLovePDF, but 100% in your browser. Your files never leave your device.</p>
     <div class="hero-stats">
-      <div class="stat"><span class="stat-num">16</span><span class="stat-label">Tools</span></div>
+      <div class="stat"><span class="stat-num" id="tool-count">&nbsp;</span><span class="stat-label">Tools</span></div>
       <div class="stat-div"></div>
       <div class="stat"><span class="stat-num">0</span><span class="stat-label">Uploads</span></div>
       <div class="stat-div"></div>
@@ -62,6 +62,7 @@
       <button class="btn-primary" id="off-save">Save selected</button>
       <button class="btn-secondary" id="off-all">Save all tools</button>
       <button class="btn-secondary" id="off-clear">Remove saved</button>
+      <button class="btn-secondary" id="off-cancel" hidden>Stop</button>
     </div>
     <p class="off-size" id="off-size"></p>
   </details>
@@ -260,49 +261,78 @@ let installEv = null; const ib = document.getElementById('install-btn');
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; ib.hidden = false; });
 ib.onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice; installEv = null; ib.hidden = true; };
 window.addEventListener('appinstalled', () => { ib.hidden = true; });
-// ---- offline manager: save only what you need
-const LIBS = { pdflib:{f:['vendor/pdf-lib.min.js'],mb:.5}, pdfjs:{f:['vendor/pdf.min.mjs','vendor/pdf.worker.min.mjs'],mb:1.8}, jszip:{f:['vendor/jszip.min.js'],mb:.1}, crypt:{f:['tools/pdfcrypt.js'],mb:.02}, ocr:{f:['vendor/tesseract/tesseract.min.js','vendor/tesseract/worker.min.js','vendor/tesseract/tesseract-core-simd-lstm.wasm.js','vendor/tesseract/tesseract-core-lstm.wasm.js','vendor/tesseract/eng.traineddata.gz'],mb:11.7} };
+// ---- offline manager: save only what you need, and show what is really ready
+const LIBS = {
+  pdflib:{f:['vendor/pdf-lib.min.js'],mb:.5}, pdfjs:{f:['vendor/pdf.min.mjs','vendor/pdf.worker.min.mjs'],mb:1.8}, jszip:{f:['vendor/jszip.min.js'],mb:.1},
+  crypt:{f:['tools/pdfcrypt.js'],mb:.02}, video:{f:['vendor/mediabunny/mediabunny.min.mjs'],mb:.7},
+  ocr:{f:['vendor/tesseract/tesseract.min.js','vendor/tesseract/worker.min.js','vendor/tesseract/tesseract-core-simd-lstm.wasm.js','vendor/tesseract/tesseract-core-lstm.wasm.js','vendor/tesseract/eng.traineddata.gz'],mb:11.7}
+};
 const tools = [...cards].map(c => ({ href:c.getAttribute('href'), name:c.querySelector('h3').textContent, needs:(c.dataset.needs||'').split(' ').filter(Boolean) }));
-const offPanel = document.getElementById('offline-panel'), offList = document.getElementById('off-list');
-const mbOf = set => { const u=new Set(); set.forEach(t=>t.needs.forEach(n=>u.add(n))); return [...u].reduce((a,n)=>a+LIBS[n].mb,0) + set.length*0.02; };
+const extras = [{ href:'extra:hin', name:'OCR: Hindi language data', needs:[], files:['vendor/tesseract/hin.traineddata.gz'], mb:1.4 }];
+const items = tools.concat(extras);
+const filesOf = t => { const u = new Set(); if (t.files) t.files.forEach(x => u.add(x)); else u.add(t.href); t.needs.forEach(n => LIBS[n].f.forEach(x => u.add(x))); return [...u]; };
+const filesFor = set => { const u = new Set(['tools/shared.js', 'style.css']); set.forEach(t => filesOf(t).forEach(x => u.add(x))); return [...u]; };
+const mbOf = set => { const u = new Set(); let m = 0; set.forEach(t => { t.needs.forEach(n => u.add(n)); m += t.mb || 0.02; }); u.forEach(n => m += LIBS[n].mb); return m; };
 const fmtMb = m => m < 1 ? Math.round(m*1000) + ' KB' : m.toFixed(1) + ' MB';
-const filesFor = set => { const u=new Set(['tools/shared.js','style.css']); set.forEach(t=>{u.add(t.href); t.needs.forEach(n=>LIBS[n].f.forEach(x=>u.add(x)));}); return [...u]; };
-async function swCall(msg) {
-  const reg = await navigator.serviceWorker.ready;
-  return new Promise((res, rej) => {
-    const ch = new MessageChannel(); ch.port1.onmessage = e => res(e.data);
-    reg.active.postMessage(msg, [ch.port2]); setTimeout(() => rej(new Error('timeout')), 60000);
-  });
+const offPanel = document.getElementById('offline-panel'), offList = document.getElementById('off-list'), offSize = document.getElementById('off-size');
+document.getElementById('tool-count').textContent = tools.length;
+let have = new Set(), busy = false;
+function swCall(msg, onProgress) {
+  return navigator.serviceWorker.ready.then(reg => new Promise((res, rej) => {
+    const ch = new MessageChannel(), t = setTimeout(() => rej(new Error('The app did not respond. Reload and try again.')), 120000);
+    ch.port1.onmessage = e => { if (e.data.progress) { onProgress && onProgress(e.data.progress); return; } clearTimeout(t); res(e.data); };
+    (reg.active || navigator.serviceWorker.controller).postMessage(msg, [ch.port2]);
+  }));
 }
+const state = t => { const f = filesOf(t), n = f.filter(x => have.has(x)).length; return n === f.length ? 'ready' : n ? 'partial' : 'none'; };
 async function refreshOffline() {
-  let saved = [];
-  try { saved = (await swCall({ type:'status' })).saved; } catch(e) {}
+  try { have = new Set((await swCall({ type:'status' })).paths); } catch(e) { have = new Set(); }
   offList.innerHTML = '';
-  tools.forEach((t,i) => {
-    const done = saved.includes(t.href);
-    const l = document.createElement('label'); l.className = 'off-item' + (done ? ' done' : '');
-    l.innerHTML = '<input type="checkbox" data-i="'+i+'"' + (done ? ' checked disabled' : '') + '> <span>' + t.name + '</span><em>' + (done ? '✓ saved' : '') + '</em>';
+  items.forEach((t, i) => {
+    const st = state(t), l = document.createElement('label'); l.className = 'off-item ' + st;
+    l.innerHTML = '<input type="checkbox" data-i="' + i + '"' + (st === 'ready' ? ' checked disabled' : '') + '> <span></span><em></em>';
+    l.querySelector('span').textContent = t.name;
+    l.querySelector('em').textContent = st === 'ready' ? '✓ ready' : st === 'partial' ? '⚠ incomplete' : '';
     offList.appendChild(l);
   });
-  document.getElementById('off-status').textContent = '· ' + saved.length + ' of ' + tools.length + ' saved';
-  updSize();
+  const ready = tools.filter(t => state(t) === 'ready').length;
+  document.getElementById('off-status').textContent = '· ' + ready + ' of ' + tools.length + ' ready offline';
+  let used = ''; try { const e = await navigator.storage.estimate(); used = ' Storage used by Squeeze and its saved files: ' + fmtMb(e.usage / 1048576) + '.'; } catch(e) {}
+  updSize(used);
 }
-function selected() { return [...offList.querySelectorAll('input:checked:not(:disabled)')].map(i => tools[+i.dataset.i]); }
-function updSize() { const s = selected(); document.getElementById('off-size').textContent = s.length ? 'Selected: ' + s.length + ' tool(s), about ' + fmtMb(mbOf(s)) + ' to download.' : 'Nothing selected. Everything together is about ' + fmtMb(mbOf(tools)) + '.'; }
-offList.addEventListener('change', updSize);
-async function save(set, btn) {
-  if (!set.length) return;
-  const old = btn.textContent; btn.disabled = true; btn.textContent = 'Saving…';
-  try { const r = await swCall({ type:'save', urls: filesFor(set) }); toast(r.failed ? r.failed + ' file(s) could not be saved' : 'Saved for offline use', r.failed ? 'error' : 'success'); }
-  catch(e) { toast('Could not save: ' + e.message, 'error'); }
-  btn.disabled = false; btn.textContent = old; refreshOffline();
+const selected = () => [...offList.querySelectorAll('input:checked:not(:disabled)')].map(i => items[+i.dataset.i]);
+function updSize(extra) {
+  if (busy) return; const s = selected();
+  offSize.textContent = (s.length ? 'Selected: ' + s.length + ' item(s), about ' + fmtMb(mbOf(s)) + ' to download.' : 'Nothing selected. All tools together are about ' + fmtMb(mbOf(tools)) + '.') + (extra || offSize.dataset.extra || '');
+  if (extra !== undefined) offSize.dataset.extra = extra;
+}
+offList.addEventListener('change', () => updSize());
+const btns = ['off-save', 'off-all', 'off-clear'].map(id => document.getElementById(id)), cancelBtn = document.getElementById('off-cancel');
+async function save(set) {
+  if (!set.length || busy) return;
+  if (!navigator.onLine) { toast('You are offline. Connect to the internet to save tools.', 'error'); return; }
+  busy = true; btns.forEach(b => b.disabled = true); cancelBtn.hidden = false;
+  try {
+    const r = await swCall({ type:'save', urls: filesFor(set) }, p => offSize.textContent = 'Saving ' + p.done + ' of ' + p.total + ' files…');
+    if (r.cancelled) toast('Stopped. Files already saved are kept.', 'info');
+    else if (r.quota) toast('Not enough storage on this device. Free some space and try again.', 'error');
+    else if (r.failed.length) toast(r.failed.length + ' file(s) could not be downloaded completely. Check your connection and try again.', 'error');
+    else toast('Saved for offline use', 'success');
+  } catch(e) { toast('Could not save: ' + e.message, 'error'); }
+  busy = false; btns.forEach(b => b.disabled = false); cancelBtn.hidden = true; await refreshOffline();
 }
 if ('serviceWorker' in navigator) {
   offPanel.hidden = false;
-  document.getElementById('off-save').onclick = e => save(selected(), e.target);
-  document.getElementById('off-all').onclick = e => save(tools, e.target);
-  document.getElementById('off-clear').onclick = async () => { try { await swCall({ type:'clear' }); toast('Removed saved tools', 'success'); } catch(e) {} refreshOffline(); };
+  document.getElementById('off-save').onclick = () => save(selected());
+  document.getElementById('off-all').onclick = () => save(items);
+  cancelBtn.onclick = () => swCall({ type:'cancel' });
+  document.getElementById('off-clear').onclick = async () => {
+    if (busy || !confirm('Remove all saved tools and language data from this device? The app itself stays installed.')) return;
+    try { const r = await swCall({ type:'clear' }); toast('Removed ' + r.removed + ' saved file(s)', 'success'); } catch(e) { toast('Could not remove: ' + e.message, 'error'); }
+    refreshOffline();
+  };
   navigator.serviceWorker.ready.then(refreshOffline);
+  window.addEventListener('online', refreshOffline);
 }
 </script>
 </body>
