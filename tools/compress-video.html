@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Compress Video - Squeeze</title>
+<meta name="description" content="Make videos smaller on your device. Nothing is uploaded.">
+<meta name="theme-color" content="#2A4058">
+<link rel="icon" type="image/png" href="../icon-192.png">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body class="tool-page">
+<header class="site-header">
+  <div class="header-inner">
+    <a href="../index.html" class="logo"><span class="logo-icon">&#10216;S&#10217;</span><span class="logo-text">Squeeze</span></a>
+    <p class="tagline">100% Offline &middot; Nothing Uploaded</p>
+    <div class="header-badge"><span class="badge-dot"></span><span>Local Processing</span></div>
+  </div>
+</header>
+<div class="tool-page-header">
+  <div>
+    <a href="../index.html" class="back-link">&#8592; All Tools</a>
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div class="tool-page-icon" style="background:linear-gradient(135deg,#f97316,#eab308)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><rect x="3" y="5" width="15" height="14" rx="2"/><polygon points="21 8 18 12 21 16 21 8"/></svg>
+      </div>
+      <div class="tool-page-title"><h1>Compress Video</h1><p>Make a video file smaller. It never leaves your device.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="max-width:700px;margin:0 auto 20px">
+  <div id="unsupported" class="result-summary" hidden></div>
+  <div class="drop-zone" id="drop">
+    <input type="file" id="file-in" accept="video/*,.mp4,.m4v,.mov,.webm,.mkv">
+    <span class="drop-icon">&#127916;</span>
+    <p class="drop-text">Drop a video here</p>
+    <p class="drop-hint">MP4, MOV, WebM or MKV. Speed and results depend on your device and browser.</p>
+  </div>
+  <div id="info" class="result-summary" hidden style="text-align:left"></div>
+  <div id="controls" class="controls" hidden>
+    <div class="control-row">
+      <span class="control-label">Preset</span>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="radio" name="preset" value="small"> <span>Smaller file</span></label>
+        <label class="radio-pill"><input type="radio" name="preset" value="balanced" checked> <span>Balanced</span></label>
+        <label class="radio-pill"><input type="radio" name="preset" value="high"> <span>Higher quality</span></label>
+      </div>
+    </div>
+    <div class="control-row">
+      <span class="control-label"><label for="res">Resolution</label></span>
+      <select id="res" style="flex:1"></select>
+    </div>
+    <div class="control-row">
+      <span class="control-label">Sound</span>
+      <div class="radio-group"><label class="radio-pill"><input type="checkbox" id="mute"> <span>Remove sound</span></label></div>
+    </div>
+    <p class="opt-note" id="estimate"></p>
+    <p class="drop-hint" style="margin:6px 0 0">Keep this tab open while it works. Long videos take a while and can warm up a phone. If the result is not smaller, you will be told and can keep your original.</p>
+  </div>
+  <div class="action-row" id="action-row" hidden>
+    <button class="btn-primary" id="run-btn">&#9889; Compress Video</button>
+    <button class="btn-secondary" id="reset-btn">&#128472; Reset</button>
+  </div>
+  <div id="progress" class="result-summary" hidden>
+    <div id="p-text" role="status"></div>
+    <progress id="p-bar" max="100" value="0" style="width:100%;height:16px;margin:10px 0"></progress>
+    <button class="btn-secondary" id="cancel-btn">Stop</button>
+  </div>
+  <div class="result-summary" id="summary" hidden></div>
+</div>
+
+<script src="shared.js"></script>
+<script>
+(() => {
+  const $id = i => document.getElementById(i);
+  const fileIn = $id('file-in'), drop = $id('drop'), controls = $id('controls'), actionRow = $id('action-row'), info = $id('info'), summary = $id('summary'), prog = $id('progress'), res = $id('res');
+  let cur = null, meta = null, busy = false, conv = null, wake = null, outUrl = null, srcUrl = null;
+
+  // Presets: target pixels-per-second budget, never above a share of the source bitrate, so the file cannot balloon.
+  const PRESETS = { small: { maxH: 480, bpp: 0.055, share: 0.5, abr: 64000 }, balanced: { maxH: 720, bpp: 0.085, share: 0.75, abr: 96000 }, high: { maxH: 1080, bpp: 0.12, share: 0.9, abr: 128000 } };
+  const preset = () => document.querySelector('input[name=preset]:checked').value;
+  const even = n => Math.max(2, Math.round(n / 2) * 2);
+  const fmtTime = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0'); };
+
+  // ---- capability check, before anything is offered ----
+  async function support() {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoDecoder === 'undefined') return { ok: false, why: 'This browser cannot compress video here. Use a recent Chrome, Edge or Safari (16.4 or newer).' };
+    return { ok: true };
+  }
+  async function pickCodec(MB, w, h, bitrate) {
+    // MP4 (H.264) plays everywhere, so prefer it. If the device cannot encode H.264, fall back to WebM (VP9).
+    if (await MB.canEncodeVideo('avc', { width: w, height: h, bitrate })) return { fmt: 'mp4', v: 'avc', a: 'aac', ext: 'mp4', label: 'MP4 (H.264)' };
+    const v = await MB.getFirstEncodableVideoCodec(['vp9', 'vp8', 'av1'], { width: w, height: h, bitrate });
+    if (v) return { fmt: 'webm', v, a: 'opus', ext: 'webm', label: 'WebM (' + v.toUpperCase() + ')' };
+    return null;
+  }
+  const plan = () => {
+    const P = PRESETS[preset()], want = +res.value || meta.h, outH = Math.min(want, meta.h);
+    const scale = Math.min(1, outH / meta.h), w = even(meta.w * scale), h = even(meta.h * scale);
+    const fps = Math.min(meta.fps || 30, 30), srcRate = meta.bitrate || 4e6;
+    const vbr = Math.round(Math.max(150000, Math.min(w * h * fps * P.bpp, srcRate * P.share)));
+    const abr = $id('mute').checked || !meta.hasAudio ? 0 : P.abr;
+    return { w, h, vbr, abr, P };
+  };
+  function updateEstimate() {
+    if (!meta) return; const p = plan(), est = (p.vbr + p.abr) * meta.duration / 8;
+    $id('estimate').textContent = 'Output about ' + p.w + '×' + p.h + ', roughly ' + fmt(est) + ' (estimate; the real size is shown when it finishes).';
+  }
+
+  async function loadFile(f) {
+    if (busy) return;
+    reset(true);
+    if (!/^video\//.test(f.type) && !/\.(mp4|m4v|mov|webm|mkv)$/i.test(f.name)) { toast('Please choose a video file', 'error'); return; }
+    info.hidden = false; info.textContent = 'Reading the video…';
+    let input;
+    try {
+      const MB = await getMediabunny();
+      input = new MB.Input({ source: new MB.BlobSource(f), formats: MB.ALL_FORMATS });
+      const vt = await input.getPrimaryVideoTrack(), at = await input.getPrimaryAudioTrack();
+      if (!vt) throw new Error('NOVIDEO');
+      const duration = await input.computeDuration(); if (!(duration > 0)) throw new Error('NODURATION');
+      if (!(await vt.canDecode())) throw new Error('NODECODE:' + vt.codec);
+      let fps = 30; try { const st = await vt.computePacketStats(120); fps = st.averagePacketRate || 30; } catch (e) { }
+      meta = { w: vt.displayWidth, h: vt.displayHeight, codec: vt.codec, duration, fps, bitrate: f.size * 8 / duration, hasAudio: !!at, audioCodec: at && at.codec };
+    } catch (e) {
+      info.hidden = true; meta = null; const m = String(e.message || e);
+      toast(m.startsWith('NODECODE') ? 'This browser cannot read the video format (' + m.split(':')[1] + '). Try another browser, or convert the video first.' : m === 'NOVIDEO' ? 'No video found in this file.' : m === 'NODURATION' ? 'This video file looks empty or damaged.' : 'Could not read this video: it may be damaged or in an unsupported format.', 'error');
+      return;
+    } finally { if (input) try { input.dispose(); } catch (e) { } }
+    cur = f;
+    if (f.size > 1.5 * 1073741824) toast('This is a very large file. Phones may run out of memory; a computer is safer.', 'info', 9000);
+    info.innerHTML = '<strong></strong><br>' + fmt(f.size) + ' · ' + meta.w + '×' + meta.h + ' · ' + fmtTime(meta.duration) + ' · ' + (meta.codec || '').toUpperCase() + (meta.hasAudio ? ' + sound' : ', no sound');
+    info.querySelector('strong').textContent = f.name;
+    const heights = [1080, 720, 480, 360].filter(x => x < meta.h);
+    res.innerHTML = ''; [['', 'Keep original (' + meta.h + 'p)']].concat(heights.map(x => [x, x + 'p'])).forEach(([v, t]) => res.add(new Option(t, v)));
+    controls.hidden = false; actionRow.hidden = false; $id('mute').disabled = !meta.hasAudio; summary.hidden = true;
+    applyPresetRes(); updateEstimate();
+  }
+  function applyPresetRes() { const P = PRESETS[preset()]; const opt = [...res.options].find(o => +o.value && +o.value <= P.maxH); res.value = meta.h <= P.maxH ? '' : (opt ? opt.value : ''); }
+  document.querySelectorAll('input[name=preset]').forEach(r => r.addEventListener('change', () => { if (meta) { applyPresetRes(); updateEstimate(); } }));
+  res.addEventListener('change', updateEstimate); $id('mute').addEventListener('change', updateEstimate);
+
+  function reset(keepFile) {
+    if (outUrl) { URL.revokeObjectURL(outUrl); outUrl = null; } if (srcUrl) { URL.revokeObjectURL(srcUrl); srcUrl = null; }
+    controls.hidden = actionRow.hidden = summary.hidden = prog.hidden = info.hidden = true; cur = null; meta = null; conv = null;
+    if (!keepFile) fileIn.value = '';
+  }
+  async function release() { try { wake && await wake.release(); } catch (e) { } wake = null; }
+
+  $id('run-btn').addEventListener('click', async () => {
+    if (!cur || busy) return;
+    busy = true; const f = cur; const p = plan(); summary.hidden = true; prog.hidden = false; $id('p-bar').value = 0; $id('p-text').textContent = 'Starting…';
+    [$id('run-btn'), $id('reset-btn')].forEach(b => b.disabled = true); fileIn.disabled = true;
+    const t0 = Date.now(); let input = null, output = null, verify = null;
+    try {
+      const MB = await getMediabunny();
+      const codec = await pickCodec(MB, p.w, p.h, p.vbr);
+      if (!codec) throw new Error('NOENCODER');
+      try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { }
+      input = new MB.Input({ source: new MB.BlobSource(f), formats: MB.ALL_FORMATS });
+      output = new MB.Output({ format: codec.fmt === 'mp4' ? new MB.Mp4OutputFormat() : new MB.WebMOutputFormat(), target: new MB.BufferTarget() });
+      const mute = $id('mute').checked || !meta.hasAudio;
+      conv = await MB.Conversion.init({ input, output,
+        video: { codec: codec.v, width: p.w, height: p.h, fit: 'fill', bitrate: p.vbr },
+        audio: mute ? { discard: true } : { codec: codec.a, bitrate: p.abr } });
+      if (!conv.isValid) throw new Error('NOTRACKS');
+      conv.onProgress = x => { const pc = Math.min(99, Math.round(x * 100)), el = (Date.now() - t0) / 1000; $id('p-bar').value = pc; $id('p-text').textContent = pc + '% · ' + fmtTime(el) + ' elapsed' + (pc > 3 ? ' · about ' + fmtTime(el * (100 - pc) / pc) + ' left' : '') + ' · ' + codec.label; };
+      await conv.execute();
+      const buf = output.target.buffer; if (!buf || !buf.byteLength) throw new Error('EMPTY');
+      // Validate the result before calling it a success: it must open, have video, and match the original length.
+      $id('p-text').textContent = 'Checking the result…';
+      verify = new MB.Input({ source: new MB.BufferSource(buf), formats: MB.ALL_FORMATS });
+      const vt = await verify.getPrimaryVideoTrack(), dur = await verify.computeDuration();
+      if (!vt) throw new Error('BADOUTPUT');
+      const sink = new MB.VideoSampleSink(vt); // decode a frame near the start and one in the middle
+      for (const t of [await vt.getFirstTimestamp(), dur / 2]) { const sm = await sink.getSample(t); if (!sm) throw new Error('BADOUTPUT'); sm.close(); }
+      if (Math.abs(dur - meta.duration) > Math.max(1.5, meta.duration * 0.05)) throw new Error('BADOUTPUT');
+      const blob = new Blob([buf], { type: codec.fmt === 'mp4' ? 'video/mp4' : 'video/webm' });
+      showResult(f, blob, codec, (Date.now() - t0) / 1000);
+    } catch (e) {
+      prog.hidden = true; const m = String(e && e.message || e);
+      if (e && e.name === 'ConversionCanceledError' || /cancel/i.test(e && e.name || '')) toast('Stopped. Nothing was saved.', 'info');
+      else summary.hidden = false, summary.innerHTML = '<strong></strong>', summary.querySelector('strong').textContent =
+        m === 'NOENCODER' ? 'This device cannot encode video in a format Squeeze can write. Try a different browser (recent Chrome or Edge).' :
+        m === 'NOTRACKS' ? 'Nothing in this video could be converted by this browser.' :
+        m === 'BADOUTPUT' || m === 'EMPTY' ? 'The result did not pass the check, so it was discarded. Try a different preset or resolution.' :
+        e && (e.name === 'QuotaExceededError' || /quota|storage/i.test(m)) ? 'Not enough free storage on this device.' :
+        e instanceof RangeError || /allocate|memory/i.test(m) ? 'The device ran out of memory. Try a lower resolution, a shorter video, or a computer.' :
+        'Could not compress this video: ' + m;
+    } finally {
+      try { input && input.dispose(); } catch (e) { } try { verify && verify.dispose(); } catch (e) { }
+      conv = null; output = null; await release(); busy = false; fileIn.disabled = false;
+      [$id('run-btn'), $id('reset-btn')].forEach(b => b.disabled = false);
+    }
+  });
+  $id('cancel-btn').addEventListener('click', () => { if (conv) conv.cancel(); });
+
+  function showResult(f, blob, codec, secs) {
+    prog.hidden = true; summary.hidden = false;
+    const saved = Math.round((1 - blob.size / f.size) * 100), smaller = blob.size < f.size;
+    if (outUrl) URL.revokeObjectURL(outUrl); outUrl = URL.createObjectURL(blob);
+    const name = stem(f.name) + '_compressed.' + codec.ext;
+    summary.innerHTML = smaller
+      ? `<strong>${fmt(f.size)} &rarr; ${fmt(blob.size)} (&minus;${saved}%)</strong><br>${codec.label}, finished in ${fmtTime(secs)}. The result was opened and checked.<div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download video</button></div>`
+      : `<strong>Not smaller: ${fmt(f.size)} &rarr; ${fmt(blob.size)} (+${-saved}%)</strong><br>This video is already well compressed, so re-encoding made it bigger. Keep your original, or try "Smaller file" or a lower resolution.<div class="action-row"><button class="btn-primary" id="orig-btn">Keep original</button><button class="btn-secondary" id="dl-btn">Download the bigger version anyway</button></div>`;
+    $id('dl-btn').addEventListener('click', () => download(blob, name));
+    const ob = $id('orig-btn'); if (ob) ob.addEventListener('click', () => download(f, f.name));
+  }
+
+  fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadFile(fileIn.files[0]); });
+  setupDrop(drop, files => loadFile(files[0]));
+  $id('reset-btn').addEventListener('click', () => reset(false));
+  window.addEventListener('beforeunload', e => { if (busy) { e.preventDefault(); e.returnValue = ''; } });
+  support().then(s => { if (!s.ok) { drop.hidden = true; const u = $id('unsupported'); u.hidden = false; u.textContent = s.why; } });
+})();
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // Bump V whenever any app file changes, so installed copies update.
-const V = 'squeeze-v11';
+const V = 'squeeze-v12';
 // The app shell: always kept, never removed by "Remove saved".
 const CORE = ['./', 'icon-192.png', 'icon-512.png', 'index.html', 'manifest.webmanifest', 'style.css', 'tools/shared.js'];
 const SCOPE = new URL(self.registration.scope).pathname;

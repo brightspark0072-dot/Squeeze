@@ -34,3 +34,7 @@ GitHub Pages runs Jekyll by default, which silently **does not publish any file 
 
 ## OCR PDF
 `tools/ocr-pdf.html` renders each page (300 dpi), cleans it, reads it with Tesseract (`vendor/tesseract`, files fetched by the *Vendor Tesseract* workflow) and writes an invisible text layer (glyphless Type0 font + ToUnicode) onto the original page, so the PDF looks identical but is searchable. Printed/typed text only; sideways pages need rotating first; Hindi data is cached the first time it is used online.
+
+## Compress Video
+`tools/compress-video.html` uses the browser's own encoders (WebCodecs) through Mediabunny (`vendor/mediabunny/`, MPL-2.0, v1.61.5; 692 KB, about 177 KB gzipped; fetched by the *Vendor Mediabunny* workflow). It reads MP4/MOV/WebM/MKV, re-encodes to MP4 (H.264 + AAC) when the device can, else WebM (VP9 + Opus), keeps aspect ratio and sound (optional mute), and caps the bitrate at a share of the source bitrate so the file should not grow. The result is opened and checked before it is called a success; if it is not smaller you are told and can keep the original. Test: `node tests/video.test.js` (headless Chromium has no H.264, so only the WebM path is tested there; MP4 needs a real browser or phone).
+**FFmpeg.wasm fallback: not included.** It is about 30 MB (core + wasm), cannot encode with hardware, and its build was not obtainable in the build environment. WebCodecs covers current Chrome, Edge and Safari 16.4+; other browsers get a clear message. It can be added later behind an opt-in download if needed.

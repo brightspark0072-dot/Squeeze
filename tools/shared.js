@@ -127,6 +127,14 @@ async function renderPage(pdfDoc, pageNum, scale = 1.5) {
 }
 
 
+let _mb = null;
+async function getMediabunny() {
+  if (_mb) return _mb;
+  try { _mb = await import(VENDOR + 'mediabunny/mediabunny.min.mjs'); }
+  catch (e) { throw new Error('Could not load the video library. Open this tool once while online so it can be saved for offline use.'); }
+  return _mb;
+}
+
 // ===== PDF LOADING (password-protected files would otherwise produce blank or corrupt output) =====
 async function loadPdfDoc(bytes, opts = {}) {
   const { PDFDocument } = await getPdfLib();
