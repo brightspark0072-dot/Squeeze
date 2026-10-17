@@ -63,14 +63,14 @@
     try {
       const ab = await file.arrayBuffer(); srcName = stem(file.name);
       const { PDFDocument } = await getPdfLib();
-      pdfDoc = await PDFDocument.load(ab, { ignoreEncryption: true });
+      pdfDoc = await loadPdfDoc(ab);
       totalPages = pdfDoc.getPageCount();
       rotations = Array(totalPages).fill(0);
       const pdfjsLib = await getPdfJs();
       pdfJsDoc = await pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise;
       await renderPages();
       ctrlBar.hidden = false; ctrlBar.style.display = 'flex'; actionRow.hidden = false;
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
   }
 
   async function renderPages() {
@@ -132,7 +132,7 @@
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download PDF</button></div>`;
       $('#dl-btn').addEventListener('click', () => download(blob, srcName + '_rotated.pdf'));
       toast('PDF rotated!', 'success');
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
   });
 
   fileIn.addEventListener('change', () => { if (fileIn.files[0]) loadPdf(fileIn.files[0]); });

@@ -71,7 +71,7 @@
         <span class="drag-handle">&#9776;</span>
         <div class="file-thumb">PDF</div>
         <div class="file-meta">
-          <div class="file-name">${f.name}</div>
+          <div class="file-name">${esc(f.name)}</div>
           <div class="file-size">${fmt(f.size)}</div>
         </div>
         <button class="btn-secondary" onclick="removeFile(${i})" style="padding:4px 10px;font-size:0.8rem">&#10005;</button>`;
@@ -103,7 +103,7 @@
       const merged = await PDFDocument.create();
       for (const f of files) {
         const ab = await f.arrayBuffer();
-        const doc = await PDFDocument.load(ab, { ignoreEncryption: true });
+        let doc; try { doc = await loadPdfDoc(ab); } catch (e) { throw new Error(f.name + ': ' + e.message); }
         const pages = await merged.copyPages(doc, doc.getPageIndices());
         pages.forEach(p => merged.addPage(p));
       }

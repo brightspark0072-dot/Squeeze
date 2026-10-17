@@ -147,15 +147,20 @@
     const dpi = +document.querySelector('input[name=dpi]:checked').value, doClean = $('#o-clean').checked, force = $('#o-force').checked;
     const btn = $('#run-btn'); btn.disabled = true; cancel = false; summary.hidden = true; prog.hidden = false;
     const say = m => prog.innerHTML = m + ' <button class="btn-secondary" id="cancel-btn" style="margin-left:10px">Stop</button>';
-    let worker = null, pdfjsDoc = null;
+    let worker = null, pdfjsDoc = null, task = null;
     try {
       say('Loading OCR engine&hellip;');
       await loadScript(BASE + 'tesseract.min.js');
       // Fetch the files once through the page so they are saved for offline use.
-      await Promise.all([BASE + 'worker.min.js', BASE + 'tesseract-core-simd-lstm.wasm.js', BASE + 'tesseract-core-lstm.wasm.js', ...langs.map(l => BASE + l + '.traineddata.gz')].map(u => fetch(u).then(r => { if (!r.ok) throw new Error('Missing OCR file: ' + u.split('/').pop()); return r.arrayBuffer(); })));
+      const files = [BASE + 'worker.min.js', BASE + 'tesseract-core-simd-lstm.wasm.js', BASE + 'tesseract-core-lstm.wasm.js', ...langs.map(l => BASE + l + '.traineddata.gz')];
+      for (const u of files) {
+        const name = u.split('/').pop();
+        try { const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status); await r.arrayBuffer(); }
+        catch (e) { throw new Error((name.includes('hin') ? 'Hindi language data is not saved on this device yet (1.4 MB).' : 'The OCR engine (' + name + ') could not be loaded.') + ' If you are offline, connect once to download it, or save it from "Offline use" on the home page.'); }
+      }
       const [pdfjs, L] = await Promise.all([getPdfJs(), getPdfLib()]);
-      const doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true });
-      const task = pdfjs.getDocument({ data: bytes.slice() }); pdfjsDoc = await task.promise;
+      const doc = await loadPdfDoc(bytes);
+      task = pdfjs.getDocument({ data: bytes.slice() }); pdfjsDoc = await task.promise;
       const n = doc.getPageCount();
       worker = await Tesseract.createWorker(langs, 1, { workerPath: BASE + 'worker.min.js', corePath: BASE.replace(/\/$/, ''), langPath: BASE.replace(/\/$/, ''), workerBlobURL: false, gzip: true, cacheMethod: 'none' });
       const font = makeFont(L, doc);
@@ -176,7 +181,7 @@
         done++; canvas.width = canvas.height = 0;
       }
       font.finish();
-      await worker.terminate(); worker = null; pdfjsDoc.destroy && pdfjsDoc.destroy();
+      await worker.terminate(); worker = null;
       if (cancel) { prog.hidden = true; toast('Stopped', 'info'); }
       else if (!words) { prog.hidden = true; summary.hidden = false; summary.innerHTML = '<strong>No text found.</strong><br>' + (skipped ? 'Every page already has text. Tick "Also read pages that already have text" to read them anyway.' : 'The pages may be handwriting or too faint. This tool reads printed or typed text.'); }
       else {
@@ -192,6 +197,7 @@
         toast('Done!', 'success');
       }
     } catch (e) { prog.hidden = true; toast('Error: ' + e.message, 'error'); if (worker) worker.terminate(); }
+    if (task) { try { task.destroy(); } catch (e) { } }
     btn.disabled = false;
   });
 

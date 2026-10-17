@@ -81,7 +81,7 @@
   const radio = n => document.querySelector('input[name=' + n + ']:checked').value;
   const NOTES = {
     images: 'Shrinks the photos and scans inside the PDF. Text stays sharp and selectable.',
-    raster: 'Turns every page into a picture. Smallest result, but text can no longer be selected or searched.'
+    raster: 'Turns every page into a picture. Smallest result, but text can no longer be selected or searched, links and form fields stop working, and sharp vector drawings become pixels. Choose "Keep text" if you need any of those.'
   };
   function note() { $('#mode-note').textContent = NOTES[radio('mode')]; }
   document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', note)); note();
@@ -126,7 +126,7 @@
   // METHOD 1: shrink the JPEG photos inside the PDF, keep everything else (text, vectors) untouched.
   async function recompressImages(bytes, preset, setStatus) {
     const { PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFDict, PDFArray } = await getPdfLib();
-    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    const doc = await loadPdfDoc(bytes, { updateMetadata: false });
     const ctx = doc.context, N = (s) => PDFName.of(s);
     const entries = ctx.enumerateIndirectObjects().filter(([, o]) => o instanceof PDFRawStream && o.dict.get(N('Subtype')) === N('Image'));
     let done = 0, changed = 0, i = 0;

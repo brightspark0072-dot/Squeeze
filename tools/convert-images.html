@@ -85,8 +85,8 @@
       const item = document.createElement('div');
       item.className = 'file-item';
       item.innerHTML = `
-        <div class="file-thumb"><img src="${url}" alt="${f.name}"></div>
-        <div class="file-meta"><div class="file-name">${f.name}</div><div class="file-size">${fmt(f.size)}</div></div>
+        <div class="file-thumb"><img onload="URL.revokeObjectURL(this.src)" src="${url}" alt="${esc(f.name)}"></div>
+        <div class="file-meta"><div class="file-name">${esc(f.name)}</div><div class="file-size">${fmt(f.size)}</div></div>
         <span class="file-status pending" id="st-${i}">Ready</span>
         <div class="file-action" id="act-${i}" hidden></div>`;
       fileList.appendChild(item);

@@ -109,7 +109,7 @@
         previewGrid.appendChild(more);
       }
       toast(totalPages + ' pages loaded', 'success');
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
   }
 
   $('#run-btn').addEventListener('click', async () => {
@@ -134,7 +134,7 @@
         <div class="action-row"><button class="btn-primary" id="dl-btn">&#8659; Download ZIP</button></div>`;
       $('#dl-btn').addEventListener('click', () => download(zipBlob, srcName + '_' + ext + '_images.zip'));
       toast('All pages exported!', 'success');
-    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    } catch(e) { toast('Error: ' + pdfErrorText(e), 'error'); }
     $('#run-btn').disabled = false; $('#run-btn').innerHTML = '&#9889; Convert All Pages';
   });
 

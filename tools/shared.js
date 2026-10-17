@@ -9,11 +9,13 @@ function toast(msg, type = 'info', duration = 3500) {
     wrap = document.createElement('div');
     wrap.id = 'toast-wrap';
     wrap.className = 'toast-wrap';
+    wrap.setAttribute('role', 'status'); wrap.setAttribute('aria-live', 'polite');
     document.body.appendChild(wrap);
   }
   const el = document.createElement('div');
   el.className = 'toast ' + type;
   el.textContent = msg;
+  if (type === 'error') { el.setAttribute('role', 'alert'); duration = Math.max(duration, 7000); }
   wrap.appendChild(el);
   setTimeout(() => el.remove(), duration);
 }
@@ -56,8 +58,9 @@ function stamp() {
   return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
 }
 function uniqueName(name) {
-  const m = /^(.*?)(\.[^.]+)?$/.exec(name);
-  return m[1] + '_' + stamp() + (m[2] || '');
+  name = String(name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '_'); // no path characters in file names
+  const m = /^(.*?)(\.[^.]+)?$/.exec(name), ext = m[2] || '';
+  return m[1].slice(0, 120) + '_' + stamp() + ext;
 }
 function download(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -121,6 +124,31 @@ async function renderPage(pdfDoc, pageNum, scale = 1.5) {
   const ctx = canvas.getContext('2d');
   await page.render({ canvas, canvasContext: ctx, viewport: vp, background: 'rgb(255,255,255)' }).promise;
   return canvas;
+}
+
+
+let _mb = null;
+async function getMediabunny() {
+  if (_mb) return _mb;
+  try { _mb = await import(VENDOR + 'mediabunny/mediabunny.min.mjs'); }
+  catch (e) { throw new Error('Could not load the video library. Open this tool once while online so it can be saved for offline use.'); }
+  return _mb;
+}
+
+// ===== PDF LOADING (password-protected files would otherwise produce blank or corrupt output) =====
+async function loadPdfDoc(bytes, opts = {}) {
+  const { PDFDocument } = await getPdfLib();
+  let doc;
+  try { doc = await PDFDocument.load(bytes, { ignoreEncryption: true, ...opts }); }
+  catch (e) { throw new Error('This file could not be read as a PDF. It may be damaged or not a PDF.'); }
+  if (doc.context.trailerInfo.Encrypt) throw new Error('This PDF is password-protected. Remove the password with Unlock PDF first.');
+  return doc;
+}
+// Friendly text for errors thrown by pdf.js
+function pdfErrorText(e) {
+  if (e && e.name === 'PasswordException') return 'This PDF is password-protected. Remove the password with Unlock PDF first.';
+  if (e && (e.name === 'InvalidPDFException' || e.name === 'MissingPDFException')) return 'This file could not be read as a PDF. It may be damaged or not a PDF.';
+  return e && e.message ? e.message : String(e);
 }
 
 // ===== STEM (filename without extension) =====

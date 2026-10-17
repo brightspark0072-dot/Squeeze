@@ -93,7 +93,7 @@ async function handleFile(file) {
   currentFile = file;
   dropZone.style.display = 'none';
   workArea.style.display = 'block';
-  $('#file-summary').innerHTML = `<strong>${file.name}</strong> &middot; ${fmt(file.size)}`;
+  $('#file-summary').innerHTML = `<strong>${esc(file.name)}</strong> &middot; ${fmt(file.size)}`;
   
   await extractText();
 }
@@ -131,8 +131,8 @@ async function extractText() {
     updateDisplay();
   } catch (err) {
     console.error(err);
-    textPreview.textContent = 'Error parsing PDF: ' + err.message;
-    toast('Failed to parse PDF content', 'error');
+    textPreview.textContent = 'Error parsing PDF: ' + pdfErrorText(err);
+    toast(pdfErrorText(err), 'error');
   }
 }
 

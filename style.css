@@ -320,9 +320,10 @@ input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; }
 .toast.success { background: var(--ok); }
 .toast.error { background: var(--bad); }
 .toast.info { background: var(--slate-dark); }
-.spinner { width: 18px; height: 18px; border: 3px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
-.btn-secondary .spinner { border-color: var(--slate-mid); border-top-color: var(--slate-dark); }
-@keyframes spin { to { transform: rotate(360deg); } }
+/* Squeeze's signature: busy indicator is a pair of brackets pressing together */
+.spinner { display: inline-block; width: 22px; height: 16px; vertical-align: -3px; border-left: 4px solid #fff; border-right: 4px solid #fff; border-radius: 3px; animation: squeeze .8s ease-in-out infinite alternate; }
+.btn-secondary .spinner { border-color: var(--slate-dark); }
+@keyframes squeeze { from { transform: scaleX(1); } to { transform: scaleX(.35); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 /* ===== RESPONSIVE ===== */
@@ -346,3 +347,22 @@ input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; }
 .off-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px;margin:8px 0 12px}
 .off-item{display:flex;align-items:center;gap:8px;font-size:.92rem;padding:4px 0;cursor:pointer}
 .off-item em{margin-left:auto;font-style:normal;color:#2A6B3A;font-size:.8rem}
+
+/* ---- touch, mobile and consistency pass ---- */
+.btn-primary, .btn-secondary, .btn-sec { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+select, input[type=text], input[type=number], input[type=password] { min-height: 44px; }
+.back-link { min-height: 44px; margin-bottom: 4px; }
+.search-box input { min-height: 44px; }
+.offline-panel summary { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+.tool-arrow { color: var(--slate); }
+.logo-icon { display: inline-block; transition: letter-spacing .25s ease; }
+.logo:hover .logo-icon, .logo:focus-visible .logo-icon { letter-spacing: -.22em; }
+.result-summary, .picked, .file-meta, .toast { overflow-wrap: anywhere; }
+.off-item { min-height: 44px; }
+.off-item.partial em { color: var(--bad); }
+.off-item input { width: 22px; height: 22px; flex-shrink: 0; }
+@media (max-width: 560px) {
+  .action-row { flex-direction: column; align-items: stretch; }
+  .action-row > button, .action-row > a { width: 100%; }
+  .off-list { grid-template-columns: 1fr; }
+}
